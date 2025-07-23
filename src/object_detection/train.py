@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
-from Dataset.dataset import CycloneDatasetOD
+from dataset.dataset import CycloneDatasetOD
 import argparse
 from typing import Tuple
 from typing import Dict
@@ -11,7 +11,7 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import os
-from models import FasterRCNN
+from config.models import FasterRCNN
 
 PATH_SAVE_MODEL = r'/media/fenrir/disk1/angel/ML-Detect-Closed-Ring-Medicanes/models'
 

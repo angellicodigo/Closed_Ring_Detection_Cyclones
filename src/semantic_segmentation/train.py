@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
-from ..Dataset.dataset import CycloneDatasetSS
+from dataset.dataset import CycloneDatasetSS
 import argparse
 from typing import Tuple
 from typing import Dict
@@ -11,7 +11,7 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import os
-from models import UNet
+from config.models import UNet
 
 PATH_SAVE_MODEL = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\Semantic Segmentation\models'
 

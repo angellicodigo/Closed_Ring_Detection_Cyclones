@@ -4,7 +4,7 @@ import pandas as pd
 import os
 import xarray as xr
 import numpy as np
-from utils import get_boundary_box, coords_to_pixels, get_segmentation_map
+from config.utils import get_boundary_box, coords_to_pixels, get_segmentation_map
 
 
 class CycloneDatasetOD(Dataset):  # For object detection
