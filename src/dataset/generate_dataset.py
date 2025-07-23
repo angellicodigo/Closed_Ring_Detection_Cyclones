@@ -3,7 +3,7 @@ import pandas as pd
 from tqdm import tqdm
 import os
 import xarray as xr
-from utils import get_boundary_box, calc_percent_valid, get_mean_info
+from config.utils import get_boundary_box, calc_percent_valid, get_mean_info, nearest_neighbors_indices
 import numpy as np
 
 PATH_SAVE =r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\medicanes_info'
@@ -12,7 +12,7 @@ PATH_INFO = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\medicanes_in
 
 
 
-def generate(radius: float, threshold: float):
+def generate(radius: float, threshold: float, isSS: bool):
     columns = ['cyclone_id', 'year', 'file_name', 'lat', 'lon', 'label']
     result = pd.DataFrame(columns=columns)
     df = pd.read_csv(PATH_INFO, sep=r'\t', engine='python')
@@ -25,13 +25,24 @@ def generate(radius: float, threshold: float):
                     file_name = os.path.basename(file_path)
                     cyclone_id = file_name.split('_')[1]
                     _, year, _, _ = get_mean_info(ds)
-                    if percent >= threshold:
-                        input = {'cyclone_id': cyclone_id, 'year': year, 'file_name': row['file_name'], 'lat': row['lat'], 'lon': row['lon'], 'label': row['label']}
-                        result.loc[len(result)] = input # type: ignore
+                    if isSS:
+                        i, j = nearest_neighbors_indices(ds, row['lat'], row['lon'])
+                        
+                        if (i != 0) and (i != (ds['lat'].shape[0] - 1)) and (j != 0) and (j != 1) and (j != ds['lat'].shape[0] - 1) and (j < ds['lat'].shape[1] - 2):
+                            input = {'cyclone_id': cyclone_id, 'year': year, 'file_name': row['file_name'], 'lat': row['lat'], 'lon': row['lon'], 'label': row['label']}
+                            result.loc[len(result)] = input # type: ignore
+                    else:
+                        if percent >= threshold:
+                            input = {'cyclone_id': cyclone_id, 'year': year, 'file_name': row['file_name'], 'lat': row['lat'], 'lon': row['lon'], 'label': row['label']}
+                            result.loc[len(result)] = input # type: ignore
 
     folder_path = os.path.join(PATH_SAVE, "annotations.txt")
     result.to_csv(folder_path, index=False, sep='\t')
     print(f'How many files? {len(result)}')
+    print(f'What years? {result["year"].unqiue()}')
+    print(f'How many years? {len(result["year"].unqiue())}')
+    print(f'What cyclone_id? {result["cyclone_id"].unqiue()}')
+    print(f'How many cyclone_id? {len(result["cyclone_id"].unqiue())}')
 
 def within_swath(ds: xr.Dataset, center_lat: float, center_lon: float) -> bool:
     non_nan = ~np.isnan(ds['wind_speed'].values)
@@ -48,7 +59,8 @@ def within_swath(ds: xr.Dataset, center_lat: float, center_lon: float) -> bool:
             
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("radius", type=int, default=100)
-    parser.add_argument("threshold", type=float, default=95)
+    parser.add_argument("--radius", type=int, default=100)
+    parser.add_argument("--threshold", type=float, default=95)
+    parser.add_argument("--isSemanticSegmentation", type=bool, default=True)
     args = parser.parse_args()
-    generate(args.radius, args.threshold)
+    generate(args.radius, args.threshold, args.isSemanticSegmentation)

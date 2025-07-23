@@ -2,13 +2,13 @@ import argparse
 from tqdm import tqdm
 import pandas as pd
 import os
-from utils import get_boundary_box, calc_percent_valid, dist_bwt_two_points, calc_std_wind_direction
+from config.utils import get_boundary_box, calc_percent_valid, dist_bwt_two_points, calc_std_wind_direction
 import xarray as xr
 import matplotlib.pyplot as plt
 
-PATH_INFO = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\medicanes_info\dataset_preprocessed.txt'
-PATH_DATASET = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\dataset'
-PATH_SAVE = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\medicanes_info'
+PATH_INFO = r'data/processed/annotations.txt'
+PATH_DATASET = r'data/processed/dataset'
+PATH_SAVE = r'images/figures'
 
 
 def get_stats(radius: float) -> None:
@@ -19,6 +19,8 @@ def get_stats(radius: float) -> None:
     for _, row in tqdm(df.iterrows(), total=len(df), desc="Plotting all cyclones in dataset"):
         file_path = os.path.join(PATH_DATASET, row['file_name'])
         with xr.open_dataset(file_path) as ds:
+            mask = ds['wvc_index'].notnull()
+            ds = ds.where(mask, drop=True)
             min_lat, min_lon, max_lat, max_lon = get_boundary_box(
                 ds, row['lat'], row['lon'], radius)
             percentage = calc_percent_valid(
@@ -41,6 +43,7 @@ def get_stats(radius: float) -> None:
     f'Average number of rows: {info["rows"].mean()}')
     print(
     f'Average number of columns: {info["cols"].mean()}')
+    print(f'Unique column lengths: {info["cols"].unique()}')
 
 
 def plot_percentages(df: pd.DataFrame) -> None:

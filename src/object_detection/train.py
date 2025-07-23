@@ -32,7 +32,7 @@ def z_score_norm(data: torch.Tensor, target: Dict[str, torch.Tensor]) -> Tuple[t
 
 def load_data(batch_size: int, val_split: float, test_split: float) -> Union[Tuple[DataLoader, DataLoader], Tuple[DataLoader, DataLoader, DataLoader]]:
     dataset = CycloneDatasetOD(
-        r'annotations.txt', r'dataset', transform=z_score_norm)
+        r'/home/angel/ML_for_Medicane_Wind_Rings/data/processed/object_detection/annotations.txt', r'/home/angel/ML_for_Medicane_Wind_Rings/data/processed/object_detection/dataset', transform=z_score_norm)
     if test_split == 0:
         training_samples = int(len(dataset) * (1 - val_split))
 

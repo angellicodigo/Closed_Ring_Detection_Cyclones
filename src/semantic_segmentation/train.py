@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import os
 from config.models import UNet
 
-PATH_SAVE_MODEL = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\Semantic Segmentation\models'
+PATH_SAVE_MODEL = r'models/semantic_segmentation'
 
 
 def z_score_norm(data: torch.Tensor, target: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
@@ -28,7 +28,7 @@ def z_score_norm(data: torch.Tensor, target: Dict[str, torch.Tensor]) -> Tuple[t
 
 def load_data(batch_size: int, val_split: float, test_split: float) -> Union[Tuple[DataLoader, DataLoader], Tuple[DataLoader, DataLoader, DataLoader]]:
     dataset = CycloneDatasetSS(
-        r'annotations.txt', r'dataset', transform=z_score_norm)
+        r'/home/angel/ML_for_Medicane_Wind_Rings/data/processed/object_detection/annotations.txt', r'/home/angel/ML_for_Medicane_Wind_Rings/data/processed/object_detection/dataset', transform=z_score_norm)
     if test_split == 0:
         training_samples = int(len(dataset) * (1 - val_split))
 
@@ -59,7 +59,7 @@ def load_data(batch_size: int, val_split: float, test_split: float) -> Union[Tup
 
 
 def init_model() -> nn.Module:
-    return UNet()
+    return UNet(channels_in=3, channels_out=3)
 
 
 def train(model: nn.Module, optimizer, train_loader: DataLoader, validation_loader: DataLoader, num_epochs: int) -> Tuple[nn.Module, List[float], List[float]]:
@@ -79,7 +79,6 @@ def train(model: nn.Module, optimizer, train_loader: DataLoader, validation_load
                 masks = masks.to(device)
                 optimizer.zero_grad()
                 outputs = model(datas)
-                print(outputs.shape)
                 loss = criterion(outputs, masks)
                 loss.backward()
                 optimizer.step()
@@ -100,8 +99,6 @@ def save_model(model: nn.Module, epoch: int) -> None:
     model_path = os.path.join(
         PATH_SAVE_MODEL, f'checkpoint_epoch_{epoch + 1}.pth')
     torch.save(model.state_dict(), model_path)
-    temp = init_model()
-    temp.load_state_dict(torch.load(model_path, weights_only=True))
 
 
 def validate(model: nn.Module, validation_loader: DataLoader, device):

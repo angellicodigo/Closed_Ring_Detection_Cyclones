@@ -4,7 +4,7 @@ import pandas as pd
 import os
 import xarray as xr
 import numpy as np
-from config.utils import get_boundary_box, coords_to_pixels, get_segmentation_map
+from config.utils import get_boundary_box, coords_to_pixels, get_segmentation_map, nearest_neighbors_indices
 
 
 class CycloneDatasetOD(Dataset):  # For object detection
@@ -65,11 +65,37 @@ class CycloneDatasetSS(Dataset):  # For semantic segmentation
         row = self.annotations.iloc[idx]
         file_path = os.path.join(self.root_dir, row['file_name'])
         with xr.open_dataset(file_path) as ds:
+            row, col = nearest_neighbors_indices(ds, row['lat'], row['lon'])
+            mask = get_segmentation_map(
+                ds, row['lat'], row['lon'], self.radius)
+            mask = ds['wvc_index'].notnull()
+            ds = ds.where(mask, drop=True)
+
+            row_dim = list(ds['lon'].sizes)[0]
+            col_dim = list(ds['lon'].sizes)[1]
+            if col[0] >= int(ds['lon'].shape[1] / 2):
+                ds = ds.drop_isel({col_dim: 0})
+                if ds['lon'].shape[1] == 82:
+                    ds = ds.drop_isel({col_dim: 1})
+            else:
+                ds = ds.drop_isel({col_dim: -1})
+                if ds['lon'].shape[1] == 82:
+                    ds = ds.drop_isel({col_dim: -2})
+
+            if row[0] >= int(ds['lon'].shape[0] / 2):
+                ds = ds.drop_isel({row_dim: 0})
+            else:
+                ds = ds.drop_isel({row_dim: -1})
+
             U = ds['wind_speed'] * np.sin(np.radians(ds['wind_dir']))
             V = ds['wind_speed'] * np.cos(np.radians(ds['wind_dir']))
 
+            land_sea_mask = ds['wind_speed'].notnull().astype(int)
+
+            # data = torch.from_numpy(
+            #     xr.concat([U, V, land_sea_mask, ds['lon'], ds['lat']], dim='channel').values).float()
             data = torch.from_numpy(
-                xr.concat([U, V], dim='channel').values).float()
+                xr.concat([U, V, land_sea_mask], dim='channel').values).float()
 
             mask = get_segmentation_map(
                 ds, row['lat'], row['lon'], self.radius)
@@ -78,7 +104,7 @@ class CycloneDatasetSS(Dataset):  # For semantic segmentation
 
             if self.transform is not None:
                 data, mask = self.transform(data, mask)
-                
+
             # Replace nan with -1
             data = torch.nan_to_num(data, nan=-1)
             ds.close()
