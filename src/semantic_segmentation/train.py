@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
+from torchmetrics.segmentation import GeneralizedDiceScore, MeanIoU
 import torch.nn as nn
 from dataset.dataset import CycloneDatasetSS
 import argparse
@@ -17,18 +18,21 @@ PATH_SAVE_MODEL = r'models/semantic_segmentation'
 
 
 def z_score_norm(data: torch.Tensor, target: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-    data_copy = data.numpy()
-    mean = np.nanmean(data_copy, axis=(1, 2), keepdims=True)
-    std = np.nanstd(data_copy, axis=(1, 2), keepdims=True)
-    mean = torch.from_numpy(mean).type_as(data)
-    std = torch.from_numpy(std).type_as(data)
-    data_norm = (data - mean) / std
+    wind_data = data[:2]
+    land_sea_mask = data[2:]
+    wind_data_copy = wind_data.numpy()
+    mean = np.nanmean(wind_data_copy, axis=(1, 2), keepdims=True)
+    std = np.nanstd(wind_data_copy, axis=(1, 2), keepdims=True)
+    mean = torch.from_numpy(mean).type_as(wind_data)
+    std = torch.from_numpy(std).type_as(wind_data)
+    wind_data_norm = (wind_data - mean) / std
+    data_norm = torch.cat([wind_data_norm, land_sea_mask], dim=0)
     return data_norm, target
 
 
 def load_data(batch_size: int, val_split: float, test_split: float) -> Union[Tuple[DataLoader, DataLoader], Tuple[DataLoader, DataLoader, DataLoader]]:
     dataset = CycloneDatasetSS(
-        r'/home/angel/ML_for_Medicane_Wind_Rings/data/processed/object_detection/annotations.txt', r'/home/angel/ML_for_Medicane_Wind_Rings/data/processed/object_detection/dataset', transform=z_score_norm)
+        r'/home/angel/ML_for_Medicane_Wind_Rings/data/processed/annotations_SS.txt', r'/home/angel/ML_for_Medicane_Wind_Rings/data/processed/dataset', transform=z_score_norm)
     if test_split == 0:
         training_samples = int(len(dataset) * (1 - val_split))
 
@@ -68,7 +72,6 @@ def train(model: nn.Module, optimizer, train_loader: DataLoader, validation_load
     model.to(device)
     train_losses = []
     val_losses = []
-    criterion = nn.CrossEntropyLoss()
     for epoch in range(num_epochs):
         model.train()
         train_loss = 0.0
@@ -79,20 +82,29 @@ def train(model: nn.Module, optimizer, train_loader: DataLoader, validation_load
                 masks = masks.to(device)
                 optimizer.zero_grad()
                 outputs = model(datas)
-                loss = criterion(outputs, masks)
+                loss = loss_fn(outputs, masks)
                 loss.backward()
                 optimizer.step()
                 train_loss += loss.item()
 
                 if batch_index == len(train_loader):
                     val_loss = validate(model, validation_loader, device)
-                    tepoch.set_postfix(
-                        train_loss=f"{train_loss / len(train_loader):.3f}", validation_loss=f"{val_loss:.3f}")
                     val_losses.append(val_loss)
                     train_losses.append(train_loss / len(train_loader))
+                    tepoch.set_postfix(
+                        train_loss=f"{train_loss / len(train_loader):.3f}", validation_loss=f"{val_loss:.3f}")
 
         save_model(model, epoch)
     return model, train_losses, val_losses
+
+
+def loss_fn(outputs: torch.Tensor, masks: torch.Tensor) -> torch.Tensor:
+    function = nn.CrossEntropyLoss()
+    return function(outputs, masks)
+
+def accuracy(outputs: torch.Tensor, masks: torch.Tensor):
+    gds = GeneralizedDiceScore(num_classes=3)
+    gds_score = gds(outputs, masks)
 
 
 def save_model(model: nn.Module, epoch: int) -> None:
@@ -103,13 +115,12 @@ def save_model(model: nn.Module, epoch: int) -> None:
 
 def validate(model: nn.Module, validation_loader: DataLoader, device):
     total_loss = 0.0
-    criterion = nn.CrossEntropyLoss()
     with torch.no_grad():
         for datas, masks in validation_loader:
             datas = datas.to(device)
             masks = masks.to(device)
             outputs = model(datas)
-            loss = criterion(outputs, masks)
+            loss = loss_fn(outputs, masks)
             total_loss += loss.item()
 
     return total_loss / len(validation_loader)
@@ -147,7 +158,7 @@ if __name__ == '__main__':
 
     model = init_model()
     optimizer = torch.optim.SGD(
-        model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0.0005)
+        model.parameters(), lr=args.lr, momentum=0.99)
     model, train_loss, validation_loss = train(
         model, optimizer, train_loader, validation_loader, args.epochs)
     plot(train_loss, validation_loss)

@@ -65,24 +65,23 @@ class CycloneDatasetSS(Dataset):  # For semantic segmentation
         row = self.annotations.iloc[idx]
         file_path = os.path.join(self.root_dir, row['file_name'])
         with xr.open_dataset(file_path) as ds:
-            row, col = nearest_neighbors_indices(ds, row['lat'], row['lon'])
-            mask = get_segmentation_map(
-                ds, row['lat'], row['lon'], self.radius)
-            mask = ds['wvc_index'].notnull()
-            ds = ds.where(mask, drop=True)
+            i, j = nearest_neighbors_indices(ds, row['lat'], row['lon'])
+            non_nan = ds['wvc_index'].notnull()
+            ds = ds.where(non_nan, drop=True)
 
             row_dim = list(ds['lon'].sizes)[0]
             col_dim = list(ds['lon'].sizes)[1]
-            if col[0] >= int(ds['lon'].shape[1] / 2):
+            # Resize dataset from (161 x 82) or (161 x 81) to (160 x 80)
+            if i[0] >= int(ds['lon'].shape[1] / 2):
                 ds = ds.drop_isel({col_dim: 0})
-                if ds['lon'].shape[1] == 82:
+                if ds['lon'].shape[1] == 81:
                     ds = ds.drop_isel({col_dim: 1})
             else:
                 ds = ds.drop_isel({col_dim: -1})
-                if ds['lon'].shape[1] == 82:
+                if ds['lon'].shape[1] == 81:
                     ds = ds.drop_isel({col_dim: -2})
 
-            if row[0] >= int(ds['lon'].shape[0] / 2):
+            if j[0] >= int(ds['lon'].shape[0] / 2):
                 ds = ds.drop_isel({row_dim: 0})
             else:
                 ds = ds.drop_isel({row_dim: -1})
