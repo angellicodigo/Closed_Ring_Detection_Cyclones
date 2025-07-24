@@ -1,6 +1,9 @@
 import torch
 from torch.utils.data import DataLoader
-from torchmetrics.segmentation import GeneralizedDiceScore, MeanIoU
+from torch.optim import Optimizer
+from torchmetrics import MetricCollection
+from torchmetrics.segmentation import GeneralizedDiceScore, MeanIoU, DiceScore
+from torchmetrics.classification import MulticlassPrecision, MulticlassRecall, MulticlassAccuracy, JaccardIndex, MulticlassConfusionMatrix
 import torch.nn as nn
 from dataset.dataset import CycloneDatasetSS
 import argparse
@@ -14,7 +17,18 @@ import matplotlib.pyplot as plt
 import os
 from config.models import UNet
 
+NUM_CLASSES = 3
 PATH_SAVE_MODEL = r'models/semantic_segmentation'
+METRICS = MetricCollection({
+    "precision": MulticlassPrecision(num_classes=NUM_CLASSES),
+    "recall": MulticlassRecall(num_classes=NUM_CLASSES),
+    "pixel_wise_acc": MulticlassAccuracy(num_classes=NUM_CLASSES),
+    "generalized_dice_score": GeneralizedDiceScore(num_classes=NUM_CLASSES),
+    "dice_score": DiceScore(num_classes=NUM_CLASSES, average='macro'),
+    "mIOU": MeanIoU(num_classes=NUM_CLASSES),
+    "IOU": JaccardIndex(task='multiclass', num_classes=NUM_CLASSES),
+    "confusion_matrix": MulticlassConfusionMatrix(num_classes=NUM_CLASSES)
+})
 
 
 def z_score_norm(data: torch.Tensor, target: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
@@ -66,16 +80,17 @@ def init_model() -> nn.Module:
     return UNet(channels_in=3, channels_out=3)
 
 
-def train(model: nn.Module, optimizer, train_loader: DataLoader, validation_loader: DataLoader, num_epochs: int) -> Tuple[nn.Module, List[float], List[float]]:
+def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, validation_loader: DataLoader, num_epochs: int) -> Tuple[nn.Module, List[float], List[float]]:
     device = torch.device(
         'cuda') if torch.cuda.is_available() else torch.device('cpu')
     model.to(device)
     train_losses = []
     val_losses = []
+    saved_path = create_folder(num_epochs, optimizer, train_loader)
     for epoch in range(num_epochs):
         model.train()
         train_loss = 0.0
-        with tqdm(train_loader, unit="batch") as tepoch:
+        with tqdm(train_loader, unit="batch", dynamic_ncols=True) as tepoch:
             for batch_index, (datas, masks) in enumerate(tepoch, start=1):
                 tepoch.set_description(f"Epoch {epoch + 1}")
                 datas = datas.to(device)
@@ -91,10 +106,21 @@ def train(model: nn.Module, optimizer, train_loader: DataLoader, validation_load
                     val_loss = validate(model, validation_loader, device)
                     val_losses.append(val_loss)
                     train_losses.append(train_loss / len(train_loader))
-                    tepoch.set_postfix(
-                        train_loss=f"{train_loss / len(train_loader):.3f}", validation_loss=f"{val_loss:.3f}")
+                    results = METRICS.compute()
 
-        save_model(model, epoch)
+                    postfix = {
+                        "train_loss": f"{train_loss / len(train_loader):.3f}",
+                        "val_loss": f"{val_loss:.3f}",
+                        "precision": f"{results['precision'].item():.3f}",
+                        "recall": f"{results['recall'].item():.3f}",
+                        "pixel_acc": f"{results['pixel_wise_acc'].item():.3f}",
+                        "dice_score": f"{results['dice_score'].item():.3f}",
+                        "IoU": f"{results['IOU'].item():.3f}"
+                    }
+
+                    tepoch.set_postfix(postfix)
+
+        save_model(model, epoch, saved_path)
     return model, train_losses, val_losses
 
 
@@ -102,31 +128,41 @@ def loss_fn(outputs: torch.Tensor, masks: torch.Tensor) -> torch.Tensor:
     function = nn.CrossEntropyLoss()
     return function(outputs, masks)
 
-def accuracy(outputs: torch.Tensor, masks: torch.Tensor):
-    gds = GeneralizedDiceScore(num_classes=3)
-    gds_score = gds(outputs, masks)
+
+def create_folder(num_epochs: int, optimizer: Optimizer, train_loader: DataLoader) -> str:
+    batch_size = train_loader.batch_size
+    lr = optimizer.param_groups[0]['lr']
+    title = f"{num_epochs}_{batch_size}_{lr}_{args.validation_split}"
+    path = os.path.join(PATH_SAVE_MODEL, title)
+    os.makedirs(path, exist_ok=True)
+    return path
 
 
-def save_model(model: nn.Module, epoch: int) -> None:
+def save_model(model: nn.Module, epoch: int, saved_path: str) -> None:
     model_path = os.path.join(
-        PATH_SAVE_MODEL, f'checkpoint_epoch_{epoch + 1}.pth')
+        saved_path, f'checkpoint_{epoch + 1}.pth')
     torch.save(model.state_dict(), model_path)
 
 
-def validate(model: nn.Module, validation_loader: DataLoader, device):
+def validate(model: nn.Module, validation_loader: DataLoader, device) -> float:
     total_loss = 0.0
+    model.eval()
+    METRICS.to(device)
+    METRICS.reset()
     with torch.no_grad():
         for datas, masks in validation_loader:
             datas = datas.to(device)
             masks = masks.to(device)
             outputs = model(datas)
+            preds = torch.argmax(outputs, dim=1)
             loss = loss_fn(outputs, masks)
             total_loss += loss.item()
+            METRICS.update(preds=preds, target=masks)
 
     return total_loss / len(validation_loader)
 
 
-def plot(train_loss: List[float], validation_loss: List[float]) -> None:
+def plot(train_loss: List[float], validation_loss: List[float], optimizer: Optimizer, train_loader: DataLoader, num_epochs: int) -> None:
     fig = plt.figure(figsize=(12, 6))
     epochs = np.arange(1, len(train_loss) + 1)
     plt.plot(epochs, train_loss, label='Training Loss', color='#1f77b4')
@@ -137,28 +173,29 @@ def plot(train_loss: List[float], validation_loss: List[float]) -> None:
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('result.png')
+    title = create_folder(num_epochs, optimizer, train_loader)
+    plt.savefig(f'{title}.png')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--lr", type=float, default=0.005)
-    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--batches", type=int, default=16)
     parser.add_argument("--validation_split", type=float, default=0.20)
     parser.add_argument("--test_split", type=float, default=0)
     args = parser.parse_args()
 
     if args.test_split == 0:
         train_loader, validation_loader = load_data(  # type: ignore
-            args.batch_size, args.validation_split, args.test_split)
+            args.batches, args.validation_split, args.test_split)
     else:
         train_loader, validation_loader, test_loader = load_data(  # type: ignore
-            args.batch_size, args.validation_split, args.test_split)
+            args.batches, args.validation_split, args.test_split)
 
     model = init_model()
     optimizer = torch.optim.SGD(
-        model.parameters(), lr=args.lr, momentum=0.99)
+        model.parameters(), lr=args.lr)
     model, train_loss, validation_loss = train(
         model, optimizer, train_loader, validation_loader, args.epochs)
-    plot(train_loss, validation_loss)
+    plot(train_loss, validation_loss, optimizer, train_loader, args.epochs)
