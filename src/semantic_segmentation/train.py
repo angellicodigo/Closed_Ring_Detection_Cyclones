@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch.optim import Optimizer
 from torchmetrics import MetricCollection
-from torchmetrics.segmentation import GeneralizedDiceScore, MeanIoU, DiceScore
+from torchmetrics.segmentation import DiceScore
 from torchmetrics.classification import MulticlassPrecision, MulticlassRecall, MulticlassAccuracy, JaccardIndex, MulticlassConfusionMatrix
 import torch.nn as nn
 from dataset.dataset import CycloneDatasetSS
@@ -23,10 +23,8 @@ METRICS = MetricCollection({
     "precision": MulticlassPrecision(num_classes=NUM_CLASSES),
     "recall": MulticlassRecall(num_classes=NUM_CLASSES),
     "pixel_wise_acc": MulticlassAccuracy(num_classes=NUM_CLASSES),
-    "generalized_dice_score": GeneralizedDiceScore(num_classes=NUM_CLASSES),
     "dice_score": DiceScore(num_classes=NUM_CLASSES, average='macro'),
-    "mIOU": MeanIoU(num_classes=NUM_CLASSES),
-    "IOU": JaccardIndex(task='multiclass', num_classes=NUM_CLASSES),
+    "mIoU": JaccardIndex(task='multiclass', num_classes=NUM_CLASSES, average='macro'),
     "confusion_matrix": MulticlassConfusionMatrix(num_classes=NUM_CLASSES)
 })
 
@@ -115,7 +113,7 @@ def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, vali
                         "recall": f"{results['recall'].item():.3f}",
                         "pixel_acc": f"{results['pixel_wise_acc'].item():.3f}",
                         "dice_score": f"{results['dice_score'].item():.3f}",
-                        "IoU": f"{results['IOU'].item():.3f}"
+                        "mIoU": f"{results['mIOU'].item():.3f}"
                     }
 
                     tepoch.set_postfix(postfix)
