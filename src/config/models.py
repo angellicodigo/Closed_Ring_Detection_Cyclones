@@ -66,7 +66,6 @@ class UNetUp(nn.Module):
 
 
 class UNet(nn.Module):
-    # https://www.youtube.com/watch?v=ZoOuNv8TXLs
     def __init__(self, channels_in, channels_out):
         super(UNet, self).__init__()
 

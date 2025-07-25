@@ -9,9 +9,8 @@ from matplotlib.colors import BoundaryNorm
 from matplotlib.axes import Axes
 import cartopy.crs as ccrs
 import numpy as np
-from config.utils import get_mean_info
 
-PATH_INFO = r'data\processed\annotations_SS copy.txt'
+PATH_INFO = r'data\processed\annotations_SS.txt'
 PATH_DATASET = r'data\processed\dataset'
 PATH_SAVE_IMAGES = r'images\annotated'
 
