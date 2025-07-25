@@ -14,9 +14,7 @@ def get_center(cyclone_id: int, year: int, month: int, day: int, time: pd.Timest
     columns = ['cyclone_id', 'lon', 'lat',
                'year', 'month', 'day', 'hour', 'MSLP']
     centers = pd.read_csv(PATH_CENTERS, sep=r'\s+', names=columns)
-
     round_hour = time.round('h').hour
-
     row = centers.loc[
         (centers['cyclone_id'] == np.int64(cyclone_id)) &
         (centers['year'] == np.int64(year)) &
@@ -158,4 +156,3 @@ def get_segmentation_map(ds: xr.Dataset, query_lat: float, query_lon: float, rad
     combined_mask = np.logical_and(distance_mask, mask)
 
     return xr.DataArray(combined_mask, dims=tuple(ds['lon'].sizes), coords=ds['lon'].coords)
-
