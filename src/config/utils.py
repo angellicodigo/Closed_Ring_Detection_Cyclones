@@ -7,7 +7,7 @@ from sklearn.metrics.pairwise import haversine_distances
 from scipy.stats import circstd
 from pyproj import Geod
 
-PATH_CENTERS = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\medicanes_info\TRACKS_CL7.dat'
+PATH_CENTERS = r'data\external\TRACKS_CL7.dat'
 
 
 def get_center(cyclone_id: int, year: int, month: int, day: int, time: pd.Timestamp) -> Tuple[float, float]:
@@ -88,23 +88,6 @@ def get_mean_info(ds: xr.Dataset) -> Tuple[pd.Timestamp, int, int, int]:
 
 
 def get_boundary_box(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float) -> Tuple[float, float, float, float]:
-    # row_indices, col_indices = nearest_neighbors_indices(
-    #     ds, query_lat, query_lon)
-    # nearest_row = row_indices[0]
-    # nearest_col = col_indices[0]
-    # dim = list(ds['lon'].sizes)
-    # row_dim = dim[0]
-    # col_dim = dim[1]
-    # # Use the nearest point as the center to calculate the boundary box
-    # nearest_point = ds.isel({row_dim: nearest_row, col_dim: nearest_col})
-    # near_lat = nearest_point["lat"].values
-    # near_lon = nearest_point["lon"].values
-    # radius = radius * 1000
-    # g = Geod(ellps="WGS84")
-    # _, latN, _ = g.fwd(near_lon, near_lat, 0,   radius)
-    # lonE, _, _ = g.fwd(near_lon, near_lat, 90,  radius)
-    # _, latS, _ = g.fwd(near_lon, near_lat, 180, radius)
-    # lonW, _, _ = g.fwd(near_lon, near_lat, 270, radius)
     radius = radius * 1000
     g = Geod(ellps="WGS84")
     _, latN, _ = g.fwd(query_lon, query_lat, 0,   radius)
