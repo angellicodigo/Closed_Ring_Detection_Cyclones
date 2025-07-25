@@ -64,9 +64,9 @@ class CycloneDatasetSS(Dataset):  # For semantic segmentation
     def __getitem__(self, idx: int):
         row = self.annotations.iloc[idx]
         file_path = os.path.join(self.root_dir, row['file_name'])
-        with xr.open_dataset(file_path) as ds:
+        with xr.open_dataset(file_path, chunks="auto") as ds:
             i, j = nearest_neighbors_indices(ds, row['lat'], row['lon'])
-            non_nan = ds['wvc_index'].notnull()
+            non_nan = ds['wvc_index'].notnull().compute()
             ds = ds.where(non_nan, drop=True)
 
             row_dim = list(ds['lon'].sizes)[0]

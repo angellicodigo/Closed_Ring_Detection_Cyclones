@@ -20,32 +20,32 @@ def generate(radius: float, threshold: float, isSS: bool):
     for _, row in tqdm(df.iterrows(), total=len(df), desc="Creating boundary box for all files"):
         file_path = os.path.join(PATH_DATASET, row['file_name'])
         with xr.open_dataset(file_path) as ds:
-                if within_swath(ds, row['lat'], row['lon']):
-                    file_name = os.path.basename(file_path)
-                    cyclone_id = file_name.split('_')[1]
-                    _, year, _, _ = get_mean_info(ds)
-                    if isSS:
-                        title = 'annotations_SS.txt'
-                        mask = ds['wvc_index'].notnull()
-                        temp = ds.where(mask, drop=True)
-                        height, width = temp['lon'].shape[0], temp['lat'].shape[1]
-                        i, j = nearest_neighbors_indices(temp, row['lat'], row['lon'])
-                        i = i[0]
-                        j = j[0]
-                        if (i > 0) and (i < height - 1):
-                            if (width == 81) and (j > 0) and (j < width - 1):
-                                input = {'cyclone_id': cyclone_id, 'year': year, 'file_name': row['file_name'], 'lat': row['lat'], 'lon': row['lon']}
-                                result.loc[len(result)] = input # type: ignore
-                            elif (width == 82) and (j > 1) and (j < width - 2):
-                                input = {'cyclone_id': cyclone_id, 'year': year, 'file_name': row['file_name'], 'lat': row['lat'], 'lon': row['lon']}
-                                result.loc[len(result)] = input # type: ignore
-                    else:
-                        title = 'annotations_OD.txt'
-                        min_lat, min_lon, max_lat, max_lon = get_boundary_box(ds, row['lat'], row['lon'], radius)
-                        percent = calc_percent_valid(ds, min_lat, min_lon, max_lat, max_lon)
-                        if percent >= threshold:
-                            input = {'cyclone_id': cyclone_id, 'year': year, 'file_name': row['file_name'], 'lat': row['lat'], 'lon': row['lon'], 'label': row['label']}
+            if within_swath(ds, row['lat'], row['lon']):
+                file_name = os.path.basename(file_path)
+                cyclone_id = file_name.split('_')[1]
+                _, year, _, _ = get_mean_info(ds)
+                if isSS:
+                    title = 'annotations_SS.txt'
+                    mask = ds['wvc_index'].notnull()
+                    temp = ds.where(mask, drop=True)
+                    height, width = temp['lon'].shape[0], temp['lat'].shape[1]
+                    i, j = nearest_neighbors_indices(temp, row['lat'], row['lon'])
+                    i = i[0]
+                    j = j[0]
+                    if (i > 0) and (i < height - 1):
+                        if (width == 81) and (j > 0) and (j < width - 1):
+                            input = {'cyclone_id': cyclone_id, 'year': year, 'file_name': row['file_name'], 'lat': row['lat'], 'lon': row['lon']}
                             result.loc[len(result)] = input # type: ignore
+                        elif (width == 82) and (j > 1) and (j < width - 2):
+                            input = {'cyclone_id': cyclone_id, 'year': year, 'file_name': row['file_name'], 'lat': row['lat'], 'lon': row['lon']}
+                            result.loc[len(result)] = input # type: ignore
+                else:
+                    title = 'annotations_OD.txt'
+                    min_lat, min_lon, max_lat, max_lon = get_boundary_box(ds, row['lat'], row['lon'], radius)
+                    percent = calc_percent_valid(ds, min_lat, min_lon, max_lat, max_lon)
+                    if percent >= threshold:
+                        input = {'cyclone_id': cyclone_id, 'year': year, 'file_name': row['file_name'], 'lat': row['lat'], 'lon': row['lon'], 'label': row['label']}
+                        result.loc[len(result)] = input # type: ignore
     
     folder_path = os.path.join(PATH_SAVE, title)
     result.to_csv(folder_path, index=False, sep='\t')

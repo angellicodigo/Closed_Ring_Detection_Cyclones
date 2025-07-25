@@ -16,6 +16,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import os
 from config.models import UNet
+import optuna
 
 NUM_CLASSES = 3
 PATH_SAVE_MODEL = r'models/semantic_segmentation'
@@ -27,6 +28,8 @@ METRICS = MetricCollection({
     "mIoU": JaccardIndex(task='multiclass', num_classes=NUM_CLASSES, average='macro'),
     "confusion_matrix": MulticlassConfusionMatrix(num_classes=NUM_CLASSES)
 })
+TRAIN_LOSSES = []
+VAL_LOSSES = []
 
 
 def z_score_norm(data: torch.Tensor, target: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
@@ -52,10 +55,11 @@ def load_data(batch_size: int, val_split: float, test_split: float) -> Union[Tup
             dataset, [training_samples, len(dataset) - training_samples])
 
         train_loader = DataLoader(
-            dataset=train_set, batch_size=batch_size, shuffle=True)
+            dataset=train_set, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=40, pin_memory=True)
         validation_loader = DataLoader(
-            dataset=validation_set, batch_size=batch_size, shuffle=False)
+            dataset=validation_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=40, pin_memory=True)
         return train_loader, validation_loader
+    
     else:
         test_samples = int((len(dataset)) * test_split)
         validation_samples = int(len(dataset) * val_split)
@@ -65,11 +69,11 @@ def load_data(batch_size: int, val_split: float, test_split: float) -> Union[Tup
             dataset, [training_samples, validation_samples, test_samples])
 
         train_loader = DataLoader(
-            dataset=train_set, batch_size=batch_size, shuffle=True)
+            dataset=train_set, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=40, pin_memory=True)
         validation_loader = DataLoader(
-            dataset=validation_set, batch_size=batch_size, shuffle=False)
+            dataset=validation_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=40, pin_memory=True)
         test_loader = DataLoader(
-            dataset=test_set, batch_size=batch_size, shuffle=False)
+            dataset=test_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=40, pin_memory=True)
 
         return train_loader, validation_loader, test_loader
 
@@ -78,48 +82,47 @@ def init_model() -> nn.Module:
     return UNet(channels_in=3, channels_out=3)
 
 
-def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, validation_loader: DataLoader, num_epochs: int) -> Tuple[nn.Module, List[float], List[float]]:
-    device = torch.device(
-        'cuda') if torch.cuda.is_available() else torch.device('cpu')
-    model.to(device)
-    train_losses = []
-    val_losses = []
-    saved_path = create_folder(num_epochs, optimizer, train_loader)
-    for epoch in range(num_epochs):
-        model.train()
-        train_loss = 0.0
-        with tqdm(train_loader, unit="batch", dynamic_ncols=True) as tepoch:
-            for batch_index, (datas, masks) in enumerate(tepoch, start=1):
-                tepoch.set_description(f"Epoch {epoch + 1}")
-                datas = datas.to(device)
-                masks = masks.to(device)
-                optimizer.zero_grad()
-                outputs = model(datas)
-                loss = loss_fn(outputs, masks)
-                loss.backward()
-                optimizer.step()
-                train_loss += loss.item()
+def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, device: torch.device):
+    model.train()
+    train_loss = 0.0
+    for datas, masks in train_loader:
+        datas = datas.to(device)
+        masks = masks.to(device)
+        optimizer.zero_grad()
+        outputs = model(datas)
+        loss = loss_fn(outputs, masks)
+        loss.backward()
+        optimizer.step()
+        train_loss += loss.item()
 
-                if batch_index == len(train_loader):
-                    val_loss = validate(model, validation_loader, device)
-                    val_losses.append(val_loss)
-                    train_losses.append(train_loss / len(train_loader))
-                    results = METRICS.compute()
+    return model, train_loss / len(train_loader)
 
-                    postfix = {
-                        "train_loss": f"{train_loss / len(train_loader):.3f}",
-                        "val_loss": f"{val_loss:.3f}",
-                        "precision": f"{results['precision'].item():.3f}",
-                        "recall": f"{results['recall'].item():.3f}",
-                        "pixel_acc": f"{results['pixel_wise_acc'].item():.3f}",
-                        "dice_score": f"{results['dice_score'].item():.3f}",
-                        "mIoU": f"{results['mIOU'].item():.3f}"
-                    }
 
-                    tepoch.set_postfix(postfix)
+def objective(trial: optuna.Trial) -> Tuple[float, float, float, float, float, float]:
+    lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
+    batch_size = trial.suggest_categorical('batch_size', [8, 16, 32])
+    num_epochs = trial.suggest_int('num_epochs', 10, 50)
 
-        save_model(model, epoch, saved_path)
-    return model, train_losses, val_losses
+    if args.test_split == 0:
+        train_loader, validation_loader = load_data(  # type: ignore
+            batch_size, args.validation_split, args.test_split)
+    else:
+        train_loader, validation_loader, test_loader = load_data(  # type: ignore
+            batch_size, args.validation_split, args.test_split)
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = init_model().to(device)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+
+    for epoch in tqdm(range(num_epochs), desc=f'Trial: {trial.number}'):
+        model, train_loss = train(model, optimizer, train_loader, device)
+        save_model(model, optimizer, train_loader, num_epochs, epoch)
+        TRAIN_LOSSES.append(train_loss)
+        val_loss = validate(model, validation_loader, device)
+        VAL_LOSSES.append(val_loss)
+        results = METRICS.compute()
+    
+    return val_loss, results['precision'].item(), results['recall'].item(), results['pixel_wise_acc'].item(), results['dice_score'].item(), results['mIoU'].item() # type: ignore
 
 
 def loss_fn(outputs: torch.Tensor, masks: torch.Tensor) -> torch.Tensor:
@@ -127,22 +130,17 @@ def loss_fn(outputs: torch.Tensor, masks: torch.Tensor) -> torch.Tensor:
     return function(outputs, masks)
 
 
-def create_folder(num_epochs: int, optimizer: Optimizer, train_loader: DataLoader) -> str:
+def save_model(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, num_epochs: int, epoch: int) -> None:
     batch_size = train_loader.batch_size
     lr = optimizer.param_groups[0]['lr']
     title = f"{num_epochs}_{batch_size}_{lr}_{args.validation_split}"
     path = os.path.join(PATH_SAVE_MODEL, title)
     os.makedirs(path, exist_ok=True)
-    return path
-
-
-def save_model(model: nn.Module, epoch: int, saved_path: str) -> None:
-    model_path = os.path.join(
-        saved_path, f'checkpoint_{epoch + 1}.pth')
+    model_path = os.path.join(path, f'checkpoint_{epoch + 1}.pth')
     torch.save(model.state_dict(), model_path)
 
 
-def validate(model: nn.Module, validation_loader: DataLoader, device) -> float:
+def validate(model: nn.Module, validation_loader: DataLoader, device: torch.device) -> float:
     total_loss = 0.0
     model.eval()
     METRICS.to(device)
@@ -160,40 +158,18 @@ def validate(model: nn.Module, validation_loader: DataLoader, device) -> float:
     return total_loss / len(validation_loader)
 
 
-def plot(train_loss: List[float], validation_loss: List[float], optimizer: Optimizer, train_loader: DataLoader, num_epochs: int) -> None:
-    fig = plt.figure(figsize=(12, 6))
-    epochs = np.arange(1, len(train_loss) + 1)
-    plt.plot(epochs, train_loss, label='Training Loss', color='#1f77b4')
-    plt.plot(epochs, validation_loss, label='Validation Loss', color='#ff7f0e')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title('Training and Validation Loss over Epochs')
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    title = create_folder(num_epochs, optimizer, train_loader)
-    plt.savefig(f'{title}.png')
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--epochs", type=int, default=20)
-    parser.add_argument("--lr", type=float, default=0.005)
-    parser.add_argument("--batches", type=int, default=16)
+    parser.add_argument("--trials", type=int, default=20)
     parser.add_argument("--validation_split", type=float, default=0.20)
     parser.add_argument("--test_split", type=float, default=0)
     args = parser.parse_args()
 
-    if args.test_split == 0:
-        train_loader, validation_loader = load_data(  # type: ignore
-            args.batches, args.validation_split, args.test_split)
-    else:
-        train_loader, validation_loader, test_loader = load_data(  # type: ignore
-            args.batches, args.validation_split, args.test_split)
+    study = optuna.create_study(directions=['minimize', 'maximize', 'maximize', 'maximize', 'maximize', 'maximize'], pruner=optuna.pruners.MedianPruner())
+    study.optimize(objective, n_trials=args.trials, timeout=1000)
 
-    model = init_model()
-    optimizer = torch.optim.SGD(
-        model.parameters(), lr=args.lr)
-    model, train_loss, validation_loss = train(
-        model, optimizer, train_loader, validation_loader, args.epochs)
-    plot(train_loss, validation_loss, optimizer, train_loader, args.epochs)
+    trial_with_highest_accuracy = max(study.best_trials, key=lambda t: t.values[1])
+    print("Trial with highest accuracy: ")
+    print(f"\tnumber: {trial_with_highest_accuracy.number}")
+    print(f"\tparams: {trial_with_highest_accuracy.params}")
+    print(f"\tvalues: {trial_with_highest_accuracy.values}")
