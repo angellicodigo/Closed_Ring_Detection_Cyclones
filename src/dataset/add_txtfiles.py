@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import pandas as pd
-from utils import get_center
+from config.utils import get_center
 import xarray as xr
 from tqdm import tqdm
 import shutil
@@ -52,7 +52,7 @@ def add_files() -> None:
                                                 cyclone_id, year, month, day, time)
 
                                             input = {'file_name': track_name, 'lat': lat,
-                                                     'lon': lon, 'label': row['closed_ring']}
+                                                     'lon': lon}
                                             df.loc[i] = input  # type: ignore
                                             i += 1
 

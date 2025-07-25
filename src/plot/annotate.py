@@ -20,6 +20,7 @@ def annotate(window_size: float) -> None:
     df = pd.read_csv(PATH_INFO, sep=r'\t', engine='python')
     datasets = []
     results = []
+    history = []
     exclude = []
     medicanes = [1328, 1461, 1542, 1575, 1622, 1702]
     over_land = [848, 849, 860, 864, 865, 868, 871, 873, 889, 900, 907, 926, 940, 943, 950, 951, 969, 981, 985, 988, 992, 1001, 1018, 1023, 1025, 1030, 1033, 1034, 1041, 1043, 1060, 1064, 1072, 1089, 1094, 1107, 1112, 1126, 1147, 1154, 1166, 1180, 1185, 1199, 1206, 1214, 1215, 1223, 1225, 1232, 1257, 1262, 1264, 1273,
@@ -41,16 +42,18 @@ def annotate(window_size: float) -> None:
     ax = fig.add_axes([0.05, 0.15, 0.9, 0.8],  # type: ignore
                       projection=ccrs.PlateCarree())
 
-    area1 = plt.axes([0.3, 0.02, 0.15, 0.07])  # type: ignore
-    area2 = plt.axes([0.5, 0.02, 0.15, 0.07])  # type: ignore
-    area3 = plt.axes([0.7, 0.02, 0.15, 0.07])  # type: ignore
+    area1 = plt.axes([0.1, 0.02, 0.15, 0.07])  # type: ignore
+    area2 = plt.axes([0.3, 0.02, 0.15, 0.07])  # type: ignore
+    area3 = plt.axes([0.5, 0.02, 0.15, 0.07])  # type: ignore
+    area4 = plt.axes([0.7, 0.02, 0.15, 0.07])  # type: ignore
 
     button_true = Button(area1, 'Is a Closed Ring',
                          color='green', hovercolor='lightgreen')
     button_false = Button(area2, 'Not a Closed Ring',
                           color='red', hovercolor='lightcoral')
     button_remove = Button(area3, 'Do not include',
-                        color='gray', hovercolor='lightgray')
+                           color='gray', hovercolor='lightgray')
+    button_back = Button(area4, 'Back', color='blue', hovercolor='lightblue')
 
     def update_plot():
         ax.clear()
@@ -79,24 +82,39 @@ def annotate(window_size: float) -> None:
                     round(row['lon']+window_size))
         ax.set_ylim(round(row['lat']-window_size),
                     round(row['lat']+window_size))
-        ax.plot(row['lon'], row['lat'], 'x', markersize=12,
+        ax.plot(row['lon'], row['lat'], 'x', markersize=10,
                 color="black", transform=ccrs.PlateCarree())
         plot_top_five(ax, ds)
-        fig.suptitle(row['cyclone_id'])
+        fig.suptitle(f"{row['cyclone_id']} - {row['label']}")
         fig.canvas.draw()
 
     def isTrue(event):
         results.append(1)
+        history.append("label")
         next()
 
     def isFalse(event):
         results.append(0)
+        history.append("label")
         next()
 
     def remove(event):
         file_name = datasets[index[0]][0]['file_name']
-        exclude.append(file_name) 
+        exclude.append(file_name)
         next()
+
+    def back(event):
+        if index[0] == 0:
+            return
+        if len(history) == 0:
+            return
+        index[0] -= 1
+        action = history.pop()
+        if action == "label":
+            results.pop()
+        elif action == "exclude":
+            exclude.pop()
+        update_plot()
 
     def next():
         index[0] += 1
@@ -115,6 +133,7 @@ def annotate(window_size: float) -> None:
     button_true.on_clicked(isTrue)
     button_false.on_clicked(isFalse)
     button_remove.on_clicked(remove)
+    button_back.on_clicked(back)
 
     update_plot()
     plt.show()
@@ -129,7 +148,9 @@ def plot_top_five(ax: Axes, ds: xr.Dataset) -> None:
     indices = points[:5]
     lon = lon[indices]
     lat = lat[indices]
-    ax.scatter(lon, lat, s=100, marker='x', color="purple", transform=ccrs.PlateCarree())
+    ax.scatter(lon, lat, s=100, marker='x', color="purple",
+               transform=ccrs.PlateCarree())
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

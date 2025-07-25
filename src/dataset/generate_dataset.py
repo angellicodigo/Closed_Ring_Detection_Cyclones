@@ -34,10 +34,10 @@ def generate(radius: float, threshold: float, isSS: bool):
                         j = j[0]
                         if (i > 0) and (i < height - 1):
                             if (width == 81) and (j > 0) and (j < width - 1):
-                                input = {'cyclone_id': cyclone_id, 'year': year, 'file_name': row['file_name'], 'lat': row['lat'], 'lon': row['lon'], 'label': row['label']}
+                                input = {'cyclone_id': cyclone_id, 'year': year, 'file_name': row['file_name'], 'lat': row['lat'], 'lon': row['lon']}
                                 result.loc[len(result)] = input # type: ignore
                             elif (width == 82) and (j > 1) and (j < width - 2):
-                                input = {'cyclone_id': cyclone_id, 'year': year, 'file_name': row['file_name'], 'lat': row['lat'], 'lon': row['lon'], 'label': row['label']}
+                                input = {'cyclone_id': cyclone_id, 'year': year, 'file_name': row['file_name'], 'lat': row['lat'], 'lon': row['lon']}
                                 result.loc[len(result)] = input # type: ignore
                     else:
                         title = 'annotations_OD.txt'
