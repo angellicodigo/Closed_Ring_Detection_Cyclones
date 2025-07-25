@@ -168,7 +168,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     study = optuna.create_study(directions=['minimize', 'maximize', 'maximize', 'maximize', 'maximize', 'maximize'], pruner=optuna.pruners.MedianPruner())
-    study.optimize(objective, n_trials=args.trials, timeout=1000)
+    study.optimize(objective, n_trials=args.trials)
 
     trial_with_highest_accuracy = max(study.best_trials, key=lambda t: t.values[1])
     print("Trial with highest accuracy: ")
