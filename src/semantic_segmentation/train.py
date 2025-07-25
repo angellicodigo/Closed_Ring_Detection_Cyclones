@@ -99,9 +99,10 @@ def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, devi
 
 
 def objective(trial: optuna.Trial) -> Tuple[float, float, float, float, float, float]:
-    lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
+    lr = trial.suggest_categorical('lr', [1e-2, 1e-3, 1e-4])
     batch_size = trial.suggest_categorical('batch_size', [8, 16, 32])
-    num_epochs = trial.suggest_int('num_epochs', 10, 50)
+    momentum = trial.suggest_float('momentum', 0.8, 0.99, step=0.01)
+    weight_decay = trial.suggest_categorical('weight_decay', [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6])
 
     if args.test_split == 0:
         train_loader, validation_loader = load_data(  # type: ignore
@@ -112,11 +113,11 @@ def objective(trial: optuna.Trial) -> Tuple[float, float, float, float, float, f
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = init_model().to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
 
-    for epoch in tqdm(range(num_epochs), desc=f'Trial: {trial.number}'):
+    for epoch in tqdm(range(args.num_epochs), desc=f'Trial: {trial.number}', unit='epoch'):
         model, train_loss = train(model, optimizer, train_loader, device)
-        save_model(model, optimizer, train_loader, num_epochs, epoch)
+        save_model(model, optimizer, train_loader, args.num_epochs, epoch)
         TRAIN_LOSSES.append(train_loss)
         val_loss = validate(model, validation_loader, device)
         VAL_LOSSES.append(val_loss)
@@ -160,7 +161,8 @@ def validate(model: nn.Module, validation_loader: DataLoader, device: torch.devi
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--trials", type=int, default=20)
+    parser.add_argument("--num_epochs", type=int, default=50)
+    parser.add_argument("--trials", type=int, default=5)
     parser.add_argument("--validation_split", type=float, default=0.20)
     parser.add_argument("--test_split", type=float, default=0)
     args = parser.parse_args()
