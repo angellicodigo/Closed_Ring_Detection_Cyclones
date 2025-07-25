@@ -2,17 +2,15 @@ import argparse
 from tqdm import tqdm
 import pandas as pd
 import os
-from utils import get_segmentation_map, get_mean_info
+from config.utils import get_segmentation_map, get_mean_info
 import xarray as xr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import numpy as np
-from matplotlib.colors import ListedColormap
 
-PATH_INFO = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\medicanes_info\dataset_preprocessed.txt'
-PATH_DATASET = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\dataset'
-PATH_SAVE = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\medicanes_info'
-PATH_SAVE_PLOTS = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\images\segmentation'
+PATH_INFO = r'C:\Users\angel\VSCode\ML_for_Medicane_Wind_Rings\data\processed\annotations_SS.txt'
+PATH_DATASET = r'C:\Users\angel\VSCode\ML_for_Medicane_Wind_Rings\data\processed\dataset'
+PATH_SAVE_IMAGES = r'C:\Users\angel\VSCode\ML_for_Medicane_Wind_Rings\images\segmentation'
 
 
 def get_stats(radius: float, window_size: float) -> None:
@@ -49,14 +47,14 @@ def get_stats(radius: float, window_size: float) -> None:
             average_time, year, month, day = get_mean_info(ds)
             plt.title(f'{year}-{month}-{day} {average_time.hour} UTC')
             title = os.path.basename(file_path)
-            folder_path = os.path.join(PATH_SAVE_PLOTS, f"{title}.png")
+            folder_path = os.path.join(PATH_SAVE_IMAGES, f"{title}.png")
             plt.savefig(folder_path, format="png")
             plt.close()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("radius", type=float)
-    parser.add_argument("window_size", type=float)
+    parser.add_argument("--radius", type=float, default=100)
+    parser.add_argument("--window_size", type=float, default=3)
     args = parser.parse_args()
     get_stats(args.radius, args.window_size)

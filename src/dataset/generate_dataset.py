@@ -32,7 +32,7 @@ def add_files():
                     PATH_DST = os.path.join(save_path, file_name)
                     shutil.copyfile(path, PATH_DST)
 
-    folder_path = os.path.join(PATH_INTERM, "annotations_all.txt")
+    folder_path = os.path.join(PATH_INTERM, "annotations_interm.txt")
     df.to_csv(folder_path, index=False, sep='\t')
     print(f'How many files? {len(df)}')  # type: ignore
 

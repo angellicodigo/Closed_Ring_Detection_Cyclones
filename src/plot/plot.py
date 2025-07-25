@@ -8,7 +8,7 @@ from matplotlib.axes import Axes
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 from pathlib import Path
-from utils import get_center, nearest_neighbors_indices, dist_bwt_two_points, get_mean_info, get_boundary_box, get_num_points_bbox, calc_percent_valid, calc_bearing
+from config.utils import get_center, nearest_neighbors_indices, dist_bwt_two_points, get_mean_info, get_boundary_box, get_num_points_bbox, calc_percent_valid, calc_bearing
 import pandas as pd
 from tqdm import tqdm
 
