@@ -6,9 +6,10 @@ from typing import Optional
 import matplotlib.patches as patches
 from matplotlib.axes import Axes
 import matplotlib.pyplot as plt
+from matplotlib.colors import BoundaryNorm
 import cartopy.crs as ccrs
 from pathlib import Path
-from config.utils import get_center, nearest_neighbors_indices, dist_bwt_two_points, get_mean_info, get_boundary_box, get_num_points_bbox, calc_percent_valid, calc_bearing
+from config.utils import get_center, nearest_neighbors_indices, dist_bwt_two_points, get_mean_info, get_boundary_box, get_num_points, calc_percent_valid, get_segmentation_map
 import pandas as pd
 from tqdm import tqdm
 
@@ -19,7 +20,7 @@ PATH_PLOT = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\medicanes_in
 PATH_PLOT_ALL_SAVE = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\images\dataset_final_angles'
 
 
-def search_dataset(file_path: Optional[Path], query_lon: Optional[float], query_lat: Optional[float], radius: float, window_size: float) -> None:
+def search_dataset(file_path: Optional[Path], query_lon: Optional[float], query_lat: Optional[float], radius: float, window_size: float, isBBox: bool) -> None:
 
     if file_path is None:
         df = pd.read_csv(PATH_PLOT, sep=r'\t', engine='python')
@@ -27,13 +28,13 @@ def search_dataset(file_path: Optional[Path], query_lon: Optional[float], query_
             # Need Path() to not get a warning
             path = Path(os.path.join(PATH_DATASET, row['file_name']))
             open_file(path, row['lon'], row['lat'],
-                      radius, window_size, True)
+                      radius, window_size, True, isBBox)
     else:
         open_file(file_path, query_lon, query_lat,
-                  radius, window_size, False)
+                  radius, window_size, False, isBBox)
 
 
-def open_file(file_path: Path, query_lon: Optional[float], query_lat: Optional[float], radius: float, window_size: float, plotAll: bool):
+def open_file(file_path: Path, query_lon: Optional[float], query_lat: Optional[float], radius: float, window_size: float, plotAll: bool, isBBox: bool):
     with xr.open_dataset(file_path) as ds:
         average_time, year, month, day = get_mean_info(ds)
         hour = average_time.hour
@@ -52,9 +53,9 @@ def open_file(file_path: Path, query_lon: Optional[float], query_lat: Optional[f
         row_dim = dim[0]
         col_dim = dim[1]
         nearest_point = ds.isel({row_dim: nearest_row, col_dim: nearest_col})
-        plot(ds, query_lat, query_lon, #type: ignore
-             title, year, month, day, hour, radius, window_size, plotAll)
-        plot_angle(ds, query_lat, query_lon, nearest_point["lat"].values, nearest_point["lon"].values, radius) # type: ignore
+        
+        plot(ds, query_lat, query_lon, year, month, day, hour, radius, window_size, isBBox)
+       
         if not plotAll:
             print(f'Name: {title}')
             print(
@@ -75,24 +76,21 @@ def open_file(file_path: Path, query_lon: Optional[float], query_lat: Optional[f
         plt.savefig(
             folder_path, format="png")
         plt.close()
-
-def plot_angle(ds: xr.Dataset, query_lat: float, query_lon: float, near_lat: float, near_lon: float, radius: float) -> None:
-    min_lat, min_lon, max_lat, max_lon = get_boundary_box(ds, query_lat, query_lon, radius)
-    plt.annotate(str(round(calc_bearing(max_lat, min_lon, near_lat, near_lon), 1)), xy=(min_lon, max_lat), xytext=(
-        0, 10), textcoords='offset pixels', ha='center', va='bottom')
-    plt.annotate(str(round(calc_bearing(min_lat, max_lon, near_lat, near_lon), 1)), xy=(max_lon, min_lat), xytext=(
-        0, -10), textcoords='offset pixels', ha='center', va='top')
     
 
-def plot(ds: xr.Dataset, query_lat: float, query_lon: float, title: str, year: int, month: int, day: int, hour: int, radius: float, window_size: float, plotAll: bool) -> None:
+def plot(ds: xr.Dataset, query_lat: float, query_lon: float,  year: int, month: int, day: int, hour: int, radius: float, window_size: float, isBBox: bool) -> None:
     plt.figure(figsize=(12, 12))
     ax = plt.axes(projection=ccrs.PlateCarree())
     U = ds['wind_speed'] * np.sin(np.radians(ds['wind_dir']))
     V = ds['wind_speed'] * np.cos(np.radians(ds['wind_dir']))
     quiver = ax.quiver(ds['lon'], ds['lat'], U, V, ds['wind_speed'],
-                       cmap='turbo', transform=ccrs.PlateCarree(), scale=500, pivot='mid')
+                       cmap='turbo', transform=ccrs.PlateCarree(), scale=500, pivot='mid', norm=norm) # type: ignore
+    boundaries = np.arange(0, 32.6, 2.5)
+    cmap = plt.get_cmap("turbo")
+    norm = BoundaryNorm(boundaries, ncolors=cmap.N)
     cbar = plt.colorbar(quiver)
     cbar.set_label("Wind Speed")
+    cbar.set_ticks(boundaries)  # type: ignore
     ax.coastlines()  # type: ignore
     gridlines = ax.gridlines(draw_labels=True)  # type: ignore
     gridlines.top_labels = False
@@ -105,9 +103,8 @@ def plot(ds: xr.Dataset, query_lat: float, query_lon: float, title: str, year: i
     plt.plot(query_lon, query_lat, 'x', markersize=12,
              color="purple", transform=ccrs.PlateCarree())
 
-    if radius != 0:
-        min_lat, min_lon, max_lat, max_lon = get_boundary_box(
-            ds, query_lat, query_lon, radius)
+    if isBBox:
+        min_lat, min_lon, max_lat, max_lon = get_boundary_box(query_lat, query_lon, radius)
 
         plot_boundary_box(ax, min_lat, min_lon, max_lat,
                           max_lon, 'black')
@@ -115,13 +112,26 @@ def plot(ds: xr.Dataset, query_lat: float, query_lon: float, title: str, year: i
         plot_percent_valid(ds, min_lat, min_lon, max_lat,
                            max_lon, 'deepskyblue', 'green')
 
-        num = get_num_points_bbox(ds, min_lat, min_lon, max_lat, max_lon)
-        percent = calc_percent_valid(ds, min_lat, min_lon, max_lat, max_lon)
+        num = get_num_points(ds, query_lat, query_lon, radius, True)
+        percent = calc_percent_valid(ds, query_lat, query_lon, radius, True)
+        plt.title(
+            f'{year}-{month}-{day} {hour} UTC (N={num}; {round(percent, 1)}% over ocean)')
+    elif radius != 0:
+        plot_semantic_segmentation(ds, query_lat, query_lon, radius, 'grey')
+        num = get_num_points(ds, query_lat, query_lon, radius, False)
+        percent = calc_percent_valid(ds, query_lat, query_lon, radius, False)
         plt.title(
             f'{year}-{month}-{day} {hour} UTC (N={num}; {round(percent, 1)}% over ocean)')
     else:
         plt.title(f'{year}-{month}-{day} {hour} UTC')
 
+
+def plot_semantic_segmentation(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float, color: str) -> None:
+    mask = get_segmentation_map(ds, query_lat, query_lon, radius)
+    mask_lats = ds['lat'].where(mask).values
+    mask_lons = ds['lon'].where(mask).values
+
+    plt.scatter(mask_lons, mask_lats, c=color, s=100, marker='o', alpha=0.75, transform=ccrs.PlateCarree())
 
 def plot_percent_valid(ds: xr.Dataset, min_lat: float, min_lon: float, max_lat: float, max_lon: float, color_ocean: str, color_land: str) -> None:
     mask = (min_lon <= ds.lon) & (ds.lon <= max_lon) & (
@@ -166,7 +176,9 @@ if __name__ == '__main__':
     parser.add_argument("--query_lat", type=float)
     parser.add_argument("--query_lon", type=float)
     parser.add_argument("--radius", type=float, default=0)
-    parser.add_argument("--window_size", type=float, default=2.5)
+    parser.add_argument("--window_size", type=float, default=3)
+    parser.add_argument("--isBBox", type=float, default=False)
+
     args = parser.parse_args()
     search_dataset(args.file_path, args.query_lon,
-                   args.query_lat, args.radius, args.window_size)
+                   args.query_lat, args.radius, args.window_size, args.isBBox)

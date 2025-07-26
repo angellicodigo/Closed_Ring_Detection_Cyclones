@@ -85,7 +85,7 @@ def get_mean_info(ds: xr.Dataset) -> Tuple[pd.Timestamp, int, int, int]:
     return average_time, year, month, day
 
 
-def get_boundary_box(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float) -> Tuple[float, float, float, float]:
+def get_boundary_box(query_lat: float, query_lon: float, radius: float) -> Tuple[float, float, float, float]:
     radius = radius * 1000
     g = Geod(ellps="WGS84")
     _, latN, _ = g.fwd(query_lon, query_lat, 0,   radius)
@@ -101,46 +101,34 @@ def get_boundary_box(ds: xr.Dataset, query_lat: float, query_lon: float, radius:
     return min_lat, min_lon, max_lat, max_lon
 
 
-def get_num_points_bbox(ds: xr.Dataset, min_lat: float, min_lon: float, max_lat: float, max_lon: float) -> float:
-    mask = (min_lon <= ds.lon) & (ds.lon <= max_lon) & (
-        min_lat <= ds.lat) & (ds.lat <= max_lat)
-    return len(ds['wind_speed'].values[mask])
+def get_num_points(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float, isBBox: bool) -> float:
+    if isBBox:
+        min_lon, max_lon, min_lat, max_lat = get_boundary_box(
+            query_lat, query_lon, radius)
+        mask = (min_lon <= ds.lon) & (ds.lon <= max_lon) & (
+            min_lat <= ds.lat) & (ds.lat <= max_lat)
+        return len(ds['wind_speed'].values[mask])
+    else:
+        lats = ds['lat'].values
+        lons = ds['lon'].values
+        distances = dist_bwt_two_points(query_lat, query_lon, lats, lons)
+        distance_mask = distances <= radius  # Not 1D
+        return np.count_nonzero(distance_mask)
 
 
-def calc_percent_valid(ds: xr.Dataset, min_lat: float, min_lon: float, max_lat: float, max_lon: float) -> float:
-    mask = (min_lon <= ds.lon) & (ds.lon <= max_lon) & (
-        min_lat <= ds.lat) & (ds.lat <= max_lat)
-    wind_speed = ds['wind_speed'].values[mask]
-    non_nan = ~np.isnan(wind_speed)
+def calc_percent_valid(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float, isBBox: bool) -> float:
+    if isBBox:
+        min_lon, max_lon, min_lat, max_lat = get_boundary_box(query_lat, query_lon, radius)
+        mask = (min_lon <= ds.lon) & (ds.lon <= max_lon) & (
+            min_lat <= ds.lat) & (ds.lat <= max_lat)
+        wind_speed = ds['wind_speed'].values[mask]
+        non_nan = ~np.isnan(wind_speed)
 
-    return (np.count_nonzero(non_nan) / len(wind_speed)) * 100
+        return (np.count_nonzero(non_nan) / len(wind_speed)) * 100
+    else: 
+        mask = get_segmentation_map(ds, query_lat, query_lon, radius)
+        return (np.count_nonzero(mask) / get_num_points(ds, query_lat, query_lon, radius, False)) * 100
 
-
-def calc_std_wind_direction(ds: xr.Dataset, min_lat: float, min_lon: float, max_lat: float, max_lon: float) -> float:
-    mask = (min_lon <= ds['lon']) & (ds['lon'] <= max_lon) & (
-        min_lat <= ds['lat']) & (ds['lat'] <= max_lat)
-    wind_direction = np.deg2rad(ds['wind_dir'].values[mask])
-    return circstd(wind_direction)
-
-
-def calc_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """
-        The angle (bearing) from (lon1, lat1) to (lon2, lat2)
-    """
-    lat1 = np.radians(lat1)
-    lon1 = np.radians(lon1)
-    lat2 = np.radians(lat2)
-    lon2 = np.radians(lon2)
-    dLon = lon2 - lon1
-
-    y = np.sin(dLon) * np.cos(lat2)
-    x = np.cos(lat1) * np.sin(lat2) - np.sin(lat1) * \
-        np.cos(lat2) * np.cos(dLon)
-
-    bearing = np.atan2(y, x)
-    bearing = np.degrees(bearing)
-    bearing = (bearing + 360) % 360
-    return bearing  # Returns clockwise degrees
 
 
 def get_segmentation_map(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float) -> xr.DataArray:
