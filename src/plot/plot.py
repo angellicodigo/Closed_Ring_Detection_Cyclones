@@ -13,9 +13,9 @@ from config.utils import get_center, nearest_neighbors_indices, dist_bwt_two_poi
 import pandas as pd
 from tqdm import tqdm
 
-PATH_FOLDER = r"C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\images"
-PATH_CENTERS = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\medicanes_info\TRACKS_CL7.dat'
-PATH_DATASET = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\dataset'
+PATH_FOLDER = r"C:\Users\angel\VSCode\ML_for_Medicane_Wind_Rings\images"
+PATH_CENTERS = r'C:\Users\angel\VSCode\ML_for_Medicane_Wind_Rings\data\external\TRACKS_CL7.dat'
+PATH_DATASET = r'C:\Users\angel\VSCode\ML_for_Medicane_Wind_Rings\data\processed\dataset'
 PATH_PLOT = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\medicanes_info\dataset_final.txt'
 PATH_PLOT_ALL_SAVE = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\images\dataset_final_angles'
 
@@ -30,7 +30,8 @@ def search_dataset(file_path: Optional[Path], query_lon: Optional[float], query_
             open_file(path, row['lon'], row['lat'],
                       radius, window_size, True, isBBox)
     else:
-        open_file(file_path, query_lon, query_lat,
+        path = Path(os.path.join(PATH_DATASET, file_path))
+        open_file(path, query_lon, query_lat,
                   radius, window_size, False, isBBox)
 
 
@@ -81,13 +82,13 @@ def open_file(file_path: Path, query_lon: Optional[float], query_lat: Optional[f
 def plot(ds: xr.Dataset, query_lat: float, query_lon: float,  year: int, month: int, day: int, hour: int, radius: float, window_size: float, isBBox: bool) -> None:
     plt.figure(figsize=(12, 12))
     ax = plt.axes(projection=ccrs.PlateCarree())
+    boundaries = np.arange(0, 32.6, 2.5)
+    cmap = plt.get_cmap("turbo")
+    norm = BoundaryNorm(boundaries, ncolors=cmap.N)
     U = ds['wind_speed'] * np.sin(np.radians(ds['wind_dir']))
     V = ds['wind_speed'] * np.cos(np.radians(ds['wind_dir']))
     quiver = ax.quiver(ds['lon'], ds['lat'], U, V, ds['wind_speed'],
                        cmap='turbo', transform=ccrs.PlateCarree(), scale=500, pivot='mid', norm=norm) # type: ignore
-    boundaries = np.arange(0, 32.6, 2.5)
-    cmap = plt.get_cmap("turbo")
-    norm = BoundaryNorm(boundaries, ncolors=cmap.N)
     cbar = plt.colorbar(quiver)
     cbar.set_label("Wind Speed")
     cbar.set_ticks(boundaries)  # type: ignore
@@ -172,7 +173,7 @@ def plot_boundary_box(ax: Axes, min_lat: float, min_lon: float, max_lat: float, 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--file_path", type=Path)
+    parser.add_argument("--file_name", type=Path)
     parser.add_argument("--query_lat", type=float)
     parser.add_argument("--query_lon", type=float)
     parser.add_argument("--radius", type=float, default=0)
@@ -180,5 +181,5 @@ if __name__ == '__main__':
     parser.add_argument("--isBBox", type=float, default=False)
 
     args = parser.parse_args()
-    search_dataset(args.file_path, args.query_lon,
+    search_dataset(args.file_name, args.query_lon,
                    args.query_lat, args.radius, args.window_size, args.isBBox)

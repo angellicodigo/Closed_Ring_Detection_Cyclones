@@ -10,7 +10,7 @@ from matplotlib.axes import Axes
 import cartopy.crs as ccrs
 import numpy as np
 
-PATH_INFO = r'data\interim\annotations_all.txt'
+PATH_INFO = r'data\processed\annotations_SS.txt'
 PATH_DATASET = r'data\processed\dataset'
 
 

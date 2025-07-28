@@ -61,6 +61,13 @@ def get_stats(radius: float, isBBox: bool) -> None:
     
     print(f'Average width (km): {info["width(km)"].mean()}')
     print(f'Average height (km): {info["height(km)"].mean()}')
+    mask = pd.notna(info['label'])
+    print(f'Average number of points of labeled: {info["num_of_points"][mask].mean()}')
+    print(f'Average standard deviation of number of points: {np.std(info["num_of_points"][mask])}')
+    print(f'Average number of points of labeled on ocean: {(info["percent"][mask] / 100 * info["num_of_points"][mask]).mean()}')
+    print(f'Average standrad deviation of the number of points of labeled on ocean: {np.std(info["percent"][mask] / 100 * info["num_of_points"][mask])}')
+    print(f'Average percentage of labeled: {info["percent"][mask].mean()}')
+    print(f'Average standard deviation of percent: {np.std(info["percent"][mask])}')
 
 
 def plot(data: pd.Series, file_name: str, xlabel: str, ylabel: str, title: str, bins: Optional[List[float]] = None, counts: Optional[List[float]] = None) -> None:
