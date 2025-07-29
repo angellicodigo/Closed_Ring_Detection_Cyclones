@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 import xarray as xr
 from sklearn.metrics.pairwise import haversine_distances
-from scipy.stats import circstd
 from pyproj import Geod
 
 PATH_CENTERS = r'data\external\TRACKS_CL7.dat'
