@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from typing import Optional
 from typing import List
+from scipy.stats import gaussian_kde
+from scipy.stats import skew
 
 PATH_INFO = r'data\processed\annotations_SS.txt'
 PATH_DATASET = r'C:\Users\angel\VSCode\ML_for_Medicane_Wind_Rings\data\processed\dataset'
@@ -45,32 +47,34 @@ def get_stats(radius: float, isBBox: bool) -> None:
                     percentage = calc_percent_valid(
                         ds, row['lat'], row['lon'], radius, False)
 
-            info.loc[len(info)] = {'percent': percentage, 'lat': row['lat'], 'lon': row['lon'], 'label': row['label'], # type: ignore
-                                   'width(km)': dist_width, 'height(km)': dist_height, 'num_of_points': num}  
+            info.loc[len(info)] = {'percent': percentage, 'lat': row['lat'], 'lon': row['lon'], 'label': row['label'],  # type: ignore
+                                   'width(km)': dist_width, 'height(km)': dist_height, 'num_of_points': num}
 
     title = os.path.basename(PATH_INFO)
     percent_bins = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45,
                     50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
     percent_counts = np.arange(0, 500, 25)
     num_bins = np.arange(0, 250, 25)
-    num_counts = np.arange(0, 700, 25)
-    plot(info['percent'], f'percentages_{title}.png', 'Percent of points in boundary box over ocean (%)',
-         'Percentage of wind-speed points over ocean', 'Percentage of wind-speed points over ocean', bins=percent_bins, counts=percent_counts) # type: ignore
-    plot(info['num_of_points'], f'num_of_points_{title}.png', 'Number of points',
-         'Frequency', 'Number of points within 100 km radius', bins=num_bins, counts=num_counts) # type: ignore
-    
-    print(f'Average width (km): {info["width(km)"].mean()}')
-    print(f'Average height (km): {info["height(km)"].mean()}')
-    mask = pd.notna(info['label'])
-    print(f'Average number of points of labeled: {info["num_of_points"][mask].mean()}')
-    print(f'Average standard deviation of number of points: {np.std(info["num_of_points"][mask])}')
-    print(f'Average number of points of labeled on ocean: {(info["percent"][mask] / 100 * info["num_of_points"][mask]).mean()}')
-    print(f'Average standrad deviation of the number of points of labeled on ocean: {np.std(info["percent"][mask] / 100 * info["num_of_points"][mask])}')
-    print(f'Average percentage of labeled: {info["percent"][mask].mean()}')
-    print(f'Average standard deviation of percent: {np.std(info["percent"][mask])}')
+    num_counts = np.arange(0, 550, 25)
+    histogram(info['percent'], f'percentages_{title}.png', 'Percent of points in boundary box over ocean (%)',
+              'Percentage of wind-speed points over ocean', 'Percentage of wind-speed points over ocean', bins=percent_bins, counts=percent_counts)  # type: ignore
+    histogram(info['num_of_points'], f'num_of_points_{title}.png', 'Number of points',
+              'Frequency', 'Number of points within 100 km radius', bins=num_bins, counts=num_counts)  # type: ignore
+    histogram(info["percent"] / 100 * info["num_of_points"], f'num_of_points_on_ocean_{title}.png', 'Number of points',
+              'Frequency', 'Number of points within 100 km radius over the ocean', bins=num_bins, counts=num_counts)  # type: ignore
+    scatter(info["percent"] / 100 * info["num_of_points"], info['percent'],
+            f'scatterplot_{title}.png', 'Number of points over the ocean', 'Percentage', 'Scatterplot of points vs percentage within 100 km')
+    scatter(info["percent"] / 100 * info["num_of_points"], info['num_of_points'],
+            f'scatterplot_points_{title}.png', 'Number of points over the ocean', 'Total number of points', 'Scatterplot of types of points within 100 km')
+    boxplot(info["percent"] / 100 * info["num_of_points"],
+            f'boxplot_{title}.png', '1', 'Number of points over the ocean', 'Boxplot of points over ocean')
+    boxplot(info["percent"],
+            f'boxplot_percent_{title}.png', '1', 'Percentages', 'Boxplot of percentages')
+    densityplot(info["percent"] / 100 * info["num_of_points"],
+                f'densityplot_{title}.png', 'Number of points over the ocean', 'Probability Density Estimation', 'Density plot of points over ocean')
 
 
-def plot(data: pd.Series, file_name: str, xlabel: str, ylabel: str, title: str, bins: Optional[List[float]] = None, counts: Optional[List[float]] = None) -> None:
+def histogram(data: pd.Series, file_name: str, xlabel: str, ylabel: str, title: str, bins: Optional[List[float]] = None, counts: Optional[List[float]] = None) -> None:
     plt.figure(figsize=(12, 10))
     if bins is not None:
         plt.hist(data, bins=bins, edgecolor='k')
@@ -88,6 +92,50 @@ def plot(data: pd.Series, file_name: str, xlabel: str, ylabel: str, title: str, 
     plt.grid()
     folder_path = os.path.join(PATH_SAVE, file_name)
     plt.savefig(folder_path, format="png")
+    plt.close()
+
+
+def scatter(x: pd.Series, y: pd.Series, file_name: str, xlabel: str, ylabel: str, title: str) -> None:
+    plt.figure(figsize=(12, 10))
+    plt.scatter(x, y)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.tight_layout()
+    plt.grid()
+    folder_path = os.path.join(PATH_SAVE, file_name)
+    plt.savefig(folder_path, format="png")
+    plt.close()
+
+
+def boxplot(data: pd.Series, file_name: str, xlabel: str, ylabel: str, title: str) -> None:
+    plt.figure(figsize=(12, 10))
+    bp = plt.boxplot(data)
+    # outlier_vals = bp['fliers'][0].get_ydata()
+    # print("Outlier values:", outlier_vals)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.tight_layout()
+    plt.grid()
+    folder_path = os.path.join(PATH_SAVE, file_name)
+    plt.savefig(folder_path, format="png")
+    plt.close()
+
+
+def densityplot(data: pd.Series, file_name: str, xlabel: str, ylabel: str, title: str) -> None:
+    kde = gaussian_kde(data)
+    x_grid = np.linspace(data.min(), data.max(), 1000)
+    y_grid = kde(x_grid)
+    plt.figure(figsize=(12, 10))
+    plt.plot(x_grid, y_grid)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.grid()
+    plt.tight_layout()
+    folder_path = os.path.join(PATH_SAVE, file_name)
+    plt.savefig(folder_path, format='png')
     plt.close()
 
 

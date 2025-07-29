@@ -118,17 +118,21 @@ def get_num_points(ds: xr.Dataset, query_lat: float, query_lon: float, radius: f
 
 def calc_percent_valid(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float, isBBox: bool) -> float:
     if isBBox:
-        min_lon, max_lon, min_lat, max_lat = get_boundary_box(query_lat, query_lon, radius)
+        min_lon, max_lon, min_lat, max_lat = get_boundary_box(
+            query_lat, query_lon, radius)
         mask = (min_lon <= ds.lon) & (ds.lon <= max_lon) & (
             min_lat <= ds.lat) & (ds.lat <= max_lat)
         wind_speed = ds['wind_speed'].values[mask]
         non_nan = ~np.isnan(wind_speed)
 
         return (np.count_nonzero(non_nan) / len(wind_speed)) * 100
-    else: 
+    else:
         mask = get_segmentation_map(ds, query_lat, query_lon, radius)
         return (np.count_nonzero(mask) / get_num_points(ds, query_lat, query_lon, radius, False)) * 100
 
+
+def get_num_of_points_ocean(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float, isBBox: bool):
+    return (calc_percent_valid(ds, query_lat, query_lon, radius, isBBox) / 100) * get_num_points(ds, query_lat, query_lon, radius, isBBox)
 
 
 def get_segmentation_map(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float) -> xr.DataArray:
