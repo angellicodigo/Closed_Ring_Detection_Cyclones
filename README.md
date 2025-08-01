@@ -8,3 +8,4 @@ Medicanes are special kind of cyclones that appear only in the Mediterranean Sea
 
 This project is exploring the use of object detection (Faster R-CNN) and semantic segmentaiton (U-Nets) models. The state of the project now is currently trying to use U-Nets, specifically with partial convolution, to detect these closed ring of maximum wind speeds. This project is a W.I.P. The dataset is not uploaded on the repository to save storage.
 
+I also included a presentation that includes background information and more details of the project.
