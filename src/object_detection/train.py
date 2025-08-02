@@ -3,8 +3,8 @@ from torch.utils.data import DataLoader
 import torch.nn as nn
 from dataset.dataset import CycloneDatasetOD
 import argparse
-from typing import Tuple
-from typing import Dict
+
+
 from typing import Union
 from typing import List
 import numpy as np
@@ -20,7 +20,7 @@ def collate_fn(batch):
     return list(zip(*batch))
 
 
-def z_score_norm(data: torch.Tensor, target: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+def z_score_norm(data: torch.Tensor, target: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     data_copy = data.numpy()
     mean = np.nanmean(data_copy, axis=(1, 2), keepdims=True)
     std = np.nanstd(data_copy, axis=(1, 2), keepdims=True)
@@ -30,7 +30,7 @@ def z_score_norm(data: torch.Tensor, target: Dict[str, torch.Tensor]) -> Tuple[t
     return data_norm, target
 
 
-def load_data(batch_size: int, val_split: float, test_split: float) -> Union[Tuple[DataLoader, DataLoader], Tuple[DataLoader, DataLoader, DataLoader]]:
+def load_data(batch_size: int, val_split: float, test_split: float) -> Union[tuple[DataLoader, DataLoader], tuple[DataLoader, DataLoader, DataLoader]]:
     dataset = CycloneDatasetOD(
         r'/home/angel/ML_for_Medicane_Wind_Rings/data/processed/object_detection/annotations.txt', r'/home/angel/ML_for_Medicane_Wind_Rings/data/processed/object_detection/dataset', transform=z_score_norm)
     if test_split == 0:
@@ -66,7 +66,7 @@ def init_model() -> nn.Module:
     return FasterRCNN()
 
 
-def train(model: nn.Module, optimizer, train_loader: DataLoader, validation_loader: DataLoader, num_epochs: int) -> Tuple[nn.Module, List[float], List[float]]:
+def train(model: nn.Module, optimizer, train_loader: DataLoader, validation_loader: DataLoader, num_epochs: int) -> tuple[nn.Module, List[float], List[float]]:
     device = torch.device(
         'cuda') if torch.cuda.is_available() else torch.device('cpu')
     model.to(device)

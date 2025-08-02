@@ -16,7 +16,7 @@ NUM_OF_FOLDERS = 5939
 MEDICANES = [1328, 1461, 1542, 1575, 1622, 1702]
 
 
-def add_files():
+def add_files() -> None:
     save_path = os.path.join(PATH_WHERE_SAVE, 'dataset')
     os.makedirs(save_path, exist_ok=True)
     df = pd.read_csv(PATH_INFO, sep=r'\t', engine='python')

@@ -2,9 +2,9 @@ import pandas as pd
 import os
 from functools import reduce
 
-PATH_TXTFILES = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\txtFiles'
-PATH_TEMP = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\temp.txt'
-PATH_NEW_TXTFILES = r'C:\Users\angel\VSCode\ML-Detect-Closed-Ring-Medicanes\reformatted_txtfiles'
+PATH_TXTFILES = r'C:\Users\angel\VSCode\ML_for_Medicane_Wind_Rings\data\external\txtfiles'
+PATH_TEMP = r'C:\Users\angel\VSCode\ML_for_Medicane_Wind_Rings\src\dataset\txtfiles\temp.txt'
+PATH_NEW_TXTFILES = r'C:\Users\angel\VSCode\ML_for_Medicane_Wind_Rings\data\external\reformatted_txtfiles'
 
 
 def check() -> None:

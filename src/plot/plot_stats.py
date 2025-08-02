@@ -73,6 +73,31 @@ def get_stats(radius: float, isBBox: bool) -> None:
     densityplot(info["percent"] / 100 * info["num_of_points"],
                 f'densityplot_{title}.png', 'Number of points over the ocean', 'Probability Density Estimation', 'Density plot of points over ocean')
 
+    # point = info["percent"] / 100 * info["num_of_points"]
+    # min_skew = skew(point)
+    # print(min_skew)
+    # min_point = point.min()
+    # for i in range(500):
+    #     point = point.drop(point.idxmin())
+    #     if abs(skew(point)) < abs(min_skew):
+    #         min_skew = skew(point)
+    #         min_point = point.min()
+    
+    # print(min_point)    
+    # print(min_skew)
+
+    # point = info["percent"]
+    # min_skew = skew(point)
+    # print(min_skew)
+    # min_point = point.min()
+    # for i in range(500):
+    #     point = point.drop(point.idxmin())
+    #     if abs(skew(point)) < abs(min_skew):
+    #         min_skew = skew(point)
+    #         min_point = point.min()
+    
+    # print(min_point)    
+    # print(min_skew)
 
 def histogram(data: pd.Series, file_name: str, xlabel: str, ylabel: str, title: str, bins: Optional[List[float]] = None, counts: Optional[List[float]] = None) -> None:
     plt.figure(figsize=(12, 10))

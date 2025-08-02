@@ -13,26 +13,30 @@ import numpy as np
 PATH_INFO = r'data\processed\annotations_SS.txt'
 PATH_DATASET = r'data\processed\dataset'
 
+MEDICANES = [1328, 1461, 1542, 1575, 1622, 1702]
+OVER_LAND = [848, 849, 860, 864, 865, 868, 871, 873, 889, 900, 907, 926, 940, 943, 950, 951, 969, 981, 985, 988, 992, 1001, 1018, 1023, 1025, 1030, 1033, 1034, 1041, 1043, 1060, 1064, 1072, 1089, 1094, 1107, 1112, 1126, 1147, 1154, 1166, 1180, 1185, 1199, 1206, 1214, 1215, 1223, 1225, 1232, 1257, 1262, 1264, 1273,
+             1274, 1276, 1306, 1308, 1317, 1318, 1322, 1327, 1341, 1365, 1392, 1404, 1405, 1408, 1414, 1420, 1441, 1450, 1452, 1453, 1456, 1484, 1491, 1492, 1496, 1497, 1533, 1535, 1562, 1563, 1568, 1569, 1570, 1583, 1595, 1596, 1603, 1605, 1608, 1612, 1614, 1615, 1616, 1625, 1648, 1649, 1650, 1651, 1664, 1666, 1686, 1700]
+EXCLUDE = [1542, 1622, 1466, 1500, 1674]
+
 
 def annotate(window_size: float) -> None:
     df = pd.read_csv(PATH_INFO, sep=r'\t', engine='python')
-    datasets = []
-    results = []
-    history = []
-    exclude = []
-    medicanes = [1328, 1461, 1542, 1575, 1622, 1702]
-    over_land = [848, 849, 860, 864, 865, 868, 871, 873, 889, 900, 907, 926, 940, 943, 950, 951, 969, 981, 985, 988, 992, 1001, 1018, 1023, 1025, 1030, 1033, 1034, 1041, 1043, 1060, 1064, 1072, 1089, 1094, 1107, 1112, 1126, 1147, 1154, 1166, 1180, 1185, 1199, 1206, 1214, 1215, 1223, 1225, 1232, 1257, 1262, 1264, 1273,
-                 1274, 1276, 1306, 1308, 1317, 1318, 1322, 1327, 1341, 1365, 1392, 1404, 1405, 1408, 1414, 1420, 1441, 1450, 1452, 1453, 1456, 1484, 1491, 1492, 1496, 1497, 1533, 1535, 1562, 1563, 1568, 1569, 1570, 1583, 1595, 1596, 1603, 1605, 1608, 1612, 1614, 1615, 1616, 1625, 1648, 1649, 1650, 1651, 1664, 1666, 1686, 1700]
+    datasets_list = []
+    results_list = []
+    history_list = []
+    remove_list = []
+
     for _, row in tqdm(df.iterrows(), total=len(df), desc="Loading datasets into memory"):
         cyclone_id = row['cyclone_id']
-        if cyclone_id in medicanes:
-            results.append(row['label'])
-        elif cyclone_id not in over_land:
-            if (row['lon'] != -np.nan) or (row['lat'] != -np.nan):
-                file_path = os.path.join(PATH_DATASET, row['file_name'])
-                ds = xr.open_dataset(file_path)
-                datasets.append((row, ds))
-                ds.close()
+        if cyclone_id in MEDICANES:
+            results_list.append(row['label'])
+        elif (cyclone_id not in OVER_LAND) and (cyclone_id not in EXCLUDE):
+            if (row['lon'] != -np.nan) and (row['lat'] != -np.nan):
+                if (row['label'] == 'idk') or (int(row['slabel']) != int(row['label'])):
+                    file_path = os.path.join(PATH_DATASET, row['file_name'])
+                    ds = xr.open_dataset(file_path)
+                    datasets_list.append((row, ds))
+                    ds.close()
 
     index = [0]  # A list with 0 because list is global but integer is not
     cbar_prev = [None]
@@ -59,7 +63,7 @@ def annotate(window_size: float) -> None:
         boundaries = np.arange(0, 32.6, 2.5)
         cmap = plt.get_cmap("turbo")
         norm = BoundaryNorm(boundaries, ncolors=cmap.N)
-        row, ds = datasets[index[0]]
+        row, ds = datasets_list[index[0]]
         U = ds['wind_speed'] * np.sin(np.radians(ds['wind_dir']))
         V = ds['wind_speed'] * np.cos(np.radians(ds['wind_dir']))
         quiver = ax.quiver(ds['lon'], ds['lat'], U, V, ds['wind_speed'],
@@ -87,42 +91,39 @@ def annotate(window_size: float) -> None:
         fig.canvas.draw()
 
     def isTrue(event):
-        results.append(1)
-        history.append("label")
+        results_list.append(1)
+        history_list.append("label")
         next()
 
     def isFalse(event):
-        results.append(0)
-        history.append("label")
+        results_list.append(0)
+        history_list.append("label")
         next()
 
     def remove(event):
-        file_name = datasets[index[0]][0]['file_name']
-        exclude.append(file_name)
+        file_name = datasets_list[index[0]][0]['file_name']
+        remove_list.append(file_name)
         next()
 
     def back(event):
         if index[0] == 0:
             return
-        if len(history) == 0:
+        if len(history_list) == 0:
             return
         index[0] -= 1
-        action = history.pop()
+        action = history_list.pop()
         if action == "label":
-            results.pop()
+            results_list.pop()
         elif action == "exclude":
-            exclude.pop()
+            remove_list.pop()
         update_plot()
 
     def next():
         index[0] += 1
-        if index[0] < len(datasets):
+        if index[0] < len(datasets_list):
             update_plot()
         else:
-            print(f"How many true labels? {results.count(1)}")
-            print(f"How many false labels? {results.count(0)}")
-            print(exclude)
-            df['annotated'] = results
+            df['label'] = results_list
             save_path = os.path.join(
                 PATH_DATASET, f'new_{os.path.basename(PATH_INFO)}')
             df.to_csv(save_path, index=False)

@@ -7,13 +7,9 @@ from torchmetrics.classification import MulticlassPrecision, MulticlassRecall, M
 import torch.nn as nn
 from dataset.dataset import CycloneDatasetSS
 import argparse
-from typing import Tuple
-from typing import Dict
 from typing import Union
-from typing import List
 import numpy as np
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 import os
 from config.models import UNet
 import optuna
@@ -32,7 +28,7 @@ TRAIN_LOSSES = []
 VAL_LOSSES = []
 
 
-def z_score_norm(data: torch.Tensor, target: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+def z_score_norm(data: torch.Tensor, target: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     wind_data = data[:2]
     land_sea_mask = data[2:]
     wind_data_copy = wind_data.numpy()
@@ -45,7 +41,7 @@ def z_score_norm(data: torch.Tensor, target: Dict[str, torch.Tensor]) -> Tuple[t
     return data_norm, target
 
 
-def load_data(batch_size: int, val_split: float, test_split: float) -> Union[Tuple[DataLoader, DataLoader], Tuple[DataLoader, DataLoader, DataLoader]]:
+def load_data(batch_size: int, val_split: float, test_split: float) -> Union[tuple[DataLoader, DataLoader], tuple[DataLoader, DataLoader, DataLoader]]:
     dataset = CycloneDatasetSS(
         r'/home/angel/ML_for_Medicane_Wind_Rings/data/processed/annotations_SS.txt', r'/home/angel/ML_for_Medicane_Wind_Rings/data/processed/dataset', transform=z_score_norm)
     if test_split == 0:
@@ -59,7 +55,7 @@ def load_data(batch_size: int, val_split: float, test_split: float) -> Union[Tup
         validation_loader = DataLoader(
             dataset=validation_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=40, pin_memory=True)
         return train_loader, validation_loader
-    
+
     else:
         test_samples = int((len(dataset)) * test_split)
         validation_samples = int(len(dataset) * val_split)
@@ -98,11 +94,12 @@ def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, devi
     return model, train_loss / len(train_loader)
 
 
-def objective(trial: optuna.Trial) -> Tuple[float, float, float, float, float, float]:
+def objective(trial: optuna.Trial) -> tuple[float, float, float, float, float, float]:
     lr = trial.suggest_categorical('lr', [1e-2, 1e-3, 1e-4])
     batch_size = trial.suggest_categorical('batch_size', [8, 16, 32])
     momentum = trial.suggest_float('momentum', 0.8, 0.99, step=0.01)
-    weight_decay = trial.suggest_categorical('weight_decay', [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6])
+    weight_decay = trial.suggest_categorical(
+        'weight_decay', [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6])
 
     if args.test_split == 0:
         train_loader, validation_loader = load_data(  # type: ignore
@@ -113,7 +110,8 @@ def objective(trial: optuna.Trial) -> Tuple[float, float, float, float, float, f
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = init_model().to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
+    optimizer = torch.optim.SGD(
+        model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
 
     for epoch in tqdm(range(args.num_epochs), desc=f'Trial: {trial.number}', unit='epoch'):
         model, train_loss = train(model, optimizer, train_loader, device)
@@ -122,6 +120,7 @@ def objective(trial: optuna.Trial) -> Tuple[float, float, float, float, float, f
         val_loss = validate(model, validation_loader, device)
         VAL_LOSSES.append(val_loss)
         results = METRICS.compute()
+
     
     return val_loss, results['precision'].item(), results['recall'].item(), results['pixel_wise_acc'].item(), results['dice_score'].item(), results['mIoU'].item() # type: ignore
 
@@ -167,10 +166,12 @@ if __name__ == '__main__':
     parser.add_argument("--test_split", type=float, default=0)
     args = parser.parse_args()
 
-    study = optuna.create_study(directions=['minimize', 'maximize', 'maximize', 'maximize', 'maximize', 'maximize'], pruner=optuna.pruners.MedianPruner())
+    study = optuna.create_study(directions=['minimize', 'maximize', 'maximize',
+                                'maximize', 'maximize', 'maximize'], pruner=optuna.pruners.MedianPruner())
     study.optimize(objective, n_trials=args.trials)
 
-    trial_with_highest_accuracy = max(study.best_trials, key=lambda t: t.values[1])
+    trial_with_highest_accuracy = max(
+        study.best_trials, key=lambda t: t.values[1])
     print("Trial with highest accuracy: ")
     print(f"\tnumber: {trial_with_highest_accuracy.number}")
     print(f"\tparams: {trial_with_highest_accuracy.params}")

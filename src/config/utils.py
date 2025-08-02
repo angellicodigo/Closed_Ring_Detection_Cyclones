@@ -1,4 +1,4 @@
-from typing import Tuple
+
 from typing import Union
 import pandas as pd
 import numpy as np
@@ -9,7 +9,7 @@ from pyproj import Geod
 PATH_CENTERS = r'data\external\TRACKS_CL7.dat'
 
 
-def get_center(cyclone_id: int, year: int, month: int, day: int, time: pd.Timestamp) -> Tuple[float, float]:
+def get_center(cyclone_id: int, year: int, month: int, day: int, time: pd.Timestamp) -> tuple[float, float]:
     columns = ['cyclone_id', 'lon', 'lat',
                'year', 'month', 'day', 'hour', 'MSLP']
     centers = pd.read_csv(PATH_CENTERS, sep=r'\s+', names=columns)
@@ -65,7 +65,7 @@ def haversine(ds: xr.Dataset, query_lon: float, query_lat: float) -> np.ndarray:
     return haversine_distances(points, query_point).ravel()
 
 
-def nearest_neighbors_indices(ds: xr.Dataset, query_lat: float, query_lon: float) -> Tuple[np.ndarray, np.ndarray]:
+def nearest_neighbors_indices(ds: xr.Dataset, query_lat: float, query_lon: float) -> tuple[np.ndarray, np.ndarray]:
     distances = haversine(ds, query_lon, query_lat)
     sorted_indices = np.argsort(distances)
     mask = ds['lon'].notnull().values
@@ -75,7 +75,7 @@ def nearest_neighbors_indices(ds: xr.Dataset, query_lat: float, query_lon: float
     return original_index
 
 
-def get_mean_info(ds: xr.Dataset) -> Tuple[pd.Timestamp, int, int, int]:
+def get_mean_info(ds: xr.Dataset) -> tuple[pd.Timestamp, int, int, int]:
     average_time = pd.to_datetime(ds.time.mean().values)
     year = int(average_time.year)
     month = int(average_time.month)
@@ -84,7 +84,7 @@ def get_mean_info(ds: xr.Dataset) -> Tuple[pd.Timestamp, int, int, int]:
     return average_time, year, month, day
 
 
-def get_boundary_box(query_lat: float, query_lon: float, radius: float) -> Tuple[float, float, float, float]:
+def get_boundary_box(query_lat: float, query_lon: float, radius: float) -> tuple[float, float, float, float]:
     radius = radius * 1000
     g = Geod(ellps="WGS84")
     _, latN, _ = g.fwd(query_lon, query_lat, 0,   radius)
