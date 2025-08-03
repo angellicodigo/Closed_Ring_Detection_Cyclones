@@ -11,7 +11,7 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import os
-from config.models import FasterRCNN
+from src.semantic_segmentation.models import FasterRCNN
 
 PATH_SAVE_MODEL = r'/media/fenrir/disk1/angel/ML-Detect-Closed-Ring-Medicanes/models'
 

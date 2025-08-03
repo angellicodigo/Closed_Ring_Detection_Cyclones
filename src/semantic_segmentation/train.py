@@ -10,8 +10,8 @@ import argparse
 from typing import Union
 import numpy as np
 from tqdm import tqdm
-import os
-from config.models import UNet
+# import os
+from models import UNet
 import optuna
 
 NUM_CLASSES = 3
