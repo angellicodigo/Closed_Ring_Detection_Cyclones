@@ -15,7 +15,7 @@ from config.models import UNet
 import optuna
 
 NUM_CLASSES = 3
-PATH_SAVE_MODEL = r'models/semantic_segmentation'
+# PATH_SAVE_MODEL = r'/home/al5098/Github/ML_for_Medicane_Wind_Rings/models/semantic_segmentation'
 METRICS = MetricCollection({
     "precision": MulticlassPrecision(num_classes=NUM_CLASSES),
     "recall": MulticlassRecall(num_classes=NUM_CLASSES),
@@ -43,7 +43,7 @@ def z_score_norm(data: torch.Tensor, target: dict[str, torch.Tensor]) -> tuple[t
 
 def load_data(batch_size: int, val_split: float, test_split: float) -> Union[tuple[DataLoader, DataLoader], tuple[DataLoader, DataLoader, DataLoader]]:
     dataset = CycloneDatasetSS(
-        r'/home/angel/ML_for_Medicane_Wind_Rings/data/processed/annotations_SS.txt', r'/home/angel/ML_for_Medicane_Wind_Rings/data/processed/dataset', transform=z_score_norm)
+        r'/scratch/network/al5098/Medicanes/data/processed/annotations_SS.txt', r'/scratch/network/al5098/Medicanes/data/processed/dataset', transform=z_score_norm)
     if test_split == 0:
         training_samples = int(len(dataset) * (1 - val_split))
 
@@ -51,9 +51,9 @@ def load_data(batch_size: int, val_split: float, test_split: float) -> Union[tup
             dataset, [training_samples, len(dataset) - training_samples])
 
         train_loader = DataLoader(
-            dataset=train_set, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=40, pin_memory=True)
+            dataset=train_set, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=4, pin_memory=True)
         validation_loader = DataLoader(
-            dataset=validation_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=40, pin_memory=True)
+            dataset=validation_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=4, pin_memory=True)
         return train_loader, validation_loader
 
     else:
@@ -65,11 +65,11 @@ def load_data(batch_size: int, val_split: float, test_split: float) -> Union[tup
             dataset, [training_samples, validation_samples, test_samples])
 
         train_loader = DataLoader(
-            dataset=train_set, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=40, pin_memory=True)
+            dataset=train_set, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=4, pin_memory=True)
         validation_loader = DataLoader(
-            dataset=validation_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=40, pin_memory=True)
+            dataset=validation_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=4, pin_memory=True)
         test_loader = DataLoader(
-            dataset=test_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=40, pin_memory=True)
+            dataset=test_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=4, pin_memory=True)
 
         return train_loader, validation_loader, test_loader
 
@@ -96,7 +96,7 @@ def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, devi
 
 def objective(trial: optuna.Trial) -> tuple[float, float, float, float, float, float]:
     lr = trial.suggest_categorical('lr', [1e-2, 1e-3, 1e-4])
-    batch_size = trial.suggest_categorical('batch_size', [8, 16, 32])
+    batch_size = trial.suggest_categorical('batch_size', [8, 16, 32, 64, 128])
     momentum = trial.suggest_float('momentum', 0.8, 0.99, step=0.01)
     weight_decay = trial.suggest_categorical(
         'weight_decay', [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6])
@@ -115,7 +115,7 @@ def objective(trial: optuna.Trial) -> tuple[float, float, float, float, float, f
 
     for epoch in tqdm(range(args.num_epochs), desc=f'Trial: {trial.number}', unit='epoch'):
         model, train_loss = train(model, optimizer, train_loader, device)
-        save_model(model, optimizer, train_loader, args.num_epochs, epoch)
+        # save_model(model, optimizer, train_loader, args.num_epochs, epoch)
         TRAIN_LOSSES.append(train_loss)
         val_loss = validate(model, validation_loader, device)
         VAL_LOSSES.append(val_loss)
@@ -130,14 +130,14 @@ def loss_fn(outputs: torch.Tensor, masks: torch.Tensor) -> torch.Tensor:
     return function(outputs, masks)
 
 
-def save_model(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, num_epochs: int, epoch: int) -> None:
-    batch_size = train_loader.batch_size
-    lr = optimizer.param_groups[0]['lr']
-    title = f"{num_epochs}_{batch_size}_{lr}_{args.validation_split}"
-    path = os.path.join(PATH_SAVE_MODEL, title)
-    os.makedirs(path, exist_ok=True)
-    model_path = os.path.join(path, f'checkpoint_{epoch + 1}.pth')
-    torch.save(model.state_dict(), model_path)
+# def save_model(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, num_epochs: int, epoch: int) -> None:
+#     batch_size = train_loader.batch_size
+#     lr = optimizer.param_groups[0]['lr']
+#     title = f"{num_epochs}_{batch_size}_{lr}_{args.validation_split}"
+#     path = os.path.join(PATH_SAVE_MODEL, title)
+#     os.makedirs(path, exist_ok=True)
+#     model_path = os.path.join(path, f'checkpoint_{epoch + 1}.pth')
+#     torch.save(model.state_dict(), model_path)
 
 
 def validate(model: nn.Module, validation_loader: DataLoader, device: torch.device) -> float:
@@ -162,7 +162,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_epochs", type=int, default=50)
     parser.add_argument("--trials", type=int, default=5)
-    parser.add_argument("--validation_split", type=float, default=0.20)
+    parser.add_argument("--validation_split", type=float, default=0.25)
     parser.add_argument("--test_split", type=float, default=0)
     args = parser.parse_args()
 

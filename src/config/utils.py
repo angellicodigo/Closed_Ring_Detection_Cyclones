@@ -1,4 +1,3 @@
-
 from typing import Union
 import pandas as pd
 import numpy as np
@@ -6,8 +5,7 @@ import xarray as xr
 from sklearn.metrics.pairwise import haversine_distances
 from pyproj import Geod
 
-PATH_CENTERS = r'data\external\TRACKS_CL7.dat'
-
+PATH_CENTERS = r'/scratch/network/al5098/Medicanes/data/external/TRACKS_CL7.dat'
 
 def get_center(cyclone_id: int, year: int, month: int, day: int, time: pd.Timestamp) -> tuple[float, float]:
     columns = ['cyclone_id', 'lon', 'lat',
@@ -112,7 +110,7 @@ def get_num_points(ds: xr.Dataset, query_lat: float, query_lon: float, radius: f
         lons = ds['lon'].values
         distances = dist_bwt_two_points(query_lat, query_lon, lats, lons)
         distance_mask = distances <= radius  # Not 1D
-        return np.count_nonzero(distance_mask)
+        return np.count_nonzero(distance_mask) # type: ignore
 
 
 def calc_percent_valid(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float, isBBox: bool) -> float:
@@ -124,10 +122,10 @@ def calc_percent_valid(ds: xr.Dataset, query_lat: float, query_lon: float, radiu
         wind_speed = ds['wind_speed'].values[mask]
         non_nan = ~np.isnan(wind_speed)
 
-        return (np.count_nonzero(non_nan) / len(wind_speed)) * 100
+        return (np.count_nonzero(non_nan) / len(wind_speed)) * 100 # type: ignore
     else:
         mask = get_segmentation_map(ds, query_lat, query_lon, radius)
-        return (np.count_nonzero(mask) / get_num_points(ds, query_lat, query_lon, radius, False)) * 100
+        return (np.count_nonzero(mask) / get_num_points(ds, query_lat, query_lon, radius, False)) * 100 # type: ignore
 
 
 def get_num_of_points_ocean(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float, isBBox: bool):
