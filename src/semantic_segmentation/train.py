@@ -2,16 +2,15 @@ import torch
 from torch.utils.data import DataLoader
 from torch.optim import Optimizer
 from torchmetrics import MetricCollection
-from torchmetrics.segmentation import DiceScore
-from torchmetrics.classification import MulticlassPrecision, MulticlassRecall, MulticlassAccuracy, JaccardIndex, MulticlassConfusionMatrix
+from torchmetrics.classification import MulticlassPrecision, MulticlassRecall, MulticlassAccuracy, JaccardIndex, MulticlassConfusionMatrix, MulticlassDice
 import torch.nn as nn
-from dataset.dataset import CycloneDatasetSS
+from src.dataset.dataset import CycloneDatasetSS
 import argparse
 from typing import Union
 import numpy as np
 from tqdm import tqdm
 # import os
-from models import UNet
+from models import PUNet
 import optuna
 
 NUM_CLASSES = 3
@@ -20,7 +19,7 @@ METRICS = MetricCollection({
     "precision": MulticlassPrecision(num_classes=NUM_CLASSES),
     "recall": MulticlassRecall(num_classes=NUM_CLASSES),
     "pixel_wise_acc": MulticlassAccuracy(num_classes=NUM_CLASSES),
-    "dice_score": DiceScore(num_classes=NUM_CLASSES, average='macro'),
+    "dice_score": MulticlassDice(num_classes=NUM_CLASSES, average='macro'),
     "mIoU": JaccardIndex(task='multiclass', num_classes=NUM_CLASSES, average='macro'),
     "confusion_matrix": MulticlassConfusionMatrix(num_classes=NUM_CLASSES)
 })
@@ -29,15 +28,23 @@ VAL_LOSSES = []
 
 
 def z_score_norm(data: torch.Tensor, target: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    wind_data = data[:2]
-    land_sea_mask = data[2:]
-    wind_data_copy = wind_data.numpy()
-    mean = np.nanmean(wind_data_copy, axis=(1, 2), keepdims=True)
-    std = np.nanstd(wind_data_copy, axis=(1, 2), keepdims=True)
-    mean = torch.from_numpy(mean).type_as(wind_data)
-    std = torch.from_numpy(std).type_as(wind_data)
-    wind_data_norm = (wind_data - mean) / std
-    data_norm = torch.cat([wind_data_norm, land_sea_mask], dim=0)
+    # wind_data = data[:2]
+    # land_sea_mask = data[2:]
+    # wind_data_copy = wind_data.numpy()
+    # mean = np.nanmean(wind_data_copy, axis=(1, 2), keepdims=True)
+    # std = np.nanstd(wind_data_copy, axis=(1, 2), keepdims=True)
+    # mean = torch.from_numpy(mean).type_as(wind_data)
+    # std = torch.from_numpy(std).type_as(wind_data)
+    # wind_data_norm = (wind_data - mean) / std
+    # data_norm = torch.cat([wind_data_norm, land_sea_mask], dim=0)
+
+    data_copy = data.numpy()
+    mean = np.nanmean(data_copy, axis=(1, 2), keepdims=True)
+    std = np.nanstd(data_copy, axis=(1, 2), keepdims=True)
+    mean = torch.from_numpy(mean).type_as(data)
+    std = torch.from_numpy(std).type_as(data)
+    data_norm = (data - mean) / std
+
     return data_norm, target
 
 
@@ -51,9 +58,9 @@ def load_data(batch_size: int, val_split: float, test_split: float) -> Union[tup
             dataset, [training_samples, len(dataset) - training_samples])
 
         train_loader = DataLoader(
-            dataset=train_set, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=4, pin_memory=True)
+            dataset=train_set, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=2, pin_memory=True)
         validation_loader = DataLoader(
-            dataset=validation_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=4, pin_memory=True)
+            dataset=validation_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=2, pin_memory=True)
         return train_loader, validation_loader
 
     else:
@@ -65,17 +72,17 @@ def load_data(batch_size: int, val_split: float, test_split: float) -> Union[tup
             dataset, [training_samples, validation_samples, test_samples])
 
         train_loader = DataLoader(
-            dataset=train_set, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=4, pin_memory=True)
+            dataset=train_set, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=2, pin_memory=True)
         validation_loader = DataLoader(
-            dataset=validation_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=4, pin_memory=True)
+            dataset=validation_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=2, pin_memory=True)
         test_loader = DataLoader(
-            dataset=test_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=4, pin_memory=True)
+            dataset=test_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=2, pin_memory=True)
 
         return train_loader, validation_loader, test_loader
 
 
 def init_model() -> nn.Module:
-    return UNet(channels_in=3, channels_out=3)
+    return PUNet(channels_in=2, channels_out=NUM_CLASSES)
 
 
 def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, device: torch.device):
@@ -85,7 +92,9 @@ def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, devi
         datas = datas.to(device)
         masks = masks.to(device)
         optimizer.zero_grad()
-        outputs = model(datas)
+        binary_masks = masks.unsqueeze(1) # (B, 1, W, H) so that channels = 1
+        binary_masks = (binary_masks > 0).float() # Convert bool -> floats
+        outputs = model(datas, binary_masks)
         loss = loss_fn(outputs, masks)
         loss.backward()
         optimizer.step()
@@ -95,7 +104,7 @@ def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, devi
 
 
 def objective(trial: optuna.Trial) -> tuple[float, float, float, float, float, float]:
-    lr = trial.suggest_categorical('lr', [1e-2, 1e-3, 1e-4])
+    lr = trial.suggest_categorical('lr', [1e-1, 1e-2, 1e-3, 1e-4, 1e-5])
     batch_size = trial.suggest_categorical('batch_size', [8, 16, 32, 64, 128])
     momentum = trial.suggest_float('momentum', 0.8, 0.99, step=0.01)
     weight_decay = trial.suggest_categorical(
@@ -149,8 +158,11 @@ def validate(model: nn.Module, validation_loader: DataLoader, device: torch.devi
         for datas, masks in validation_loader:
             datas = datas.to(device)
             masks = masks.to(device)
-            outputs = model(datas)
-            preds = torch.argmax(outputs, dim=1)
+            binary_masks = masks.unsqueeze(1) # (B, 1, W, H) so that channels = 1
+            binary_masks = (binary_masks > 0).float() # Convert bool -> floats
+            outputs = model(datas, binary_masks)
+            # preds = torch.argmax(outputs, dim=1)
+            preds = torch.softmax(outputs, dim=1) 
             loss = loss_fn(outputs, masks)
             total_loss += loss.item()
             METRICS.update(preds=preds, target=masks)
