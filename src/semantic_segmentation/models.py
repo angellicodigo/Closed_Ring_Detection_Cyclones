@@ -90,7 +90,7 @@ class UNet(nn.Module):
 
 
 class PUNetDown(nn.Module):
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, batch_norm=True):
         super(PUNetDown, self).__init__()
         self.bn1 = nn.BatchNorm2d(input_size)
         self.elu1 = nn.ELU()
