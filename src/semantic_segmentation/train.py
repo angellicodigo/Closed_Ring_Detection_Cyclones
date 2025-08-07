@@ -14,7 +14,7 @@ from tqdm import tqdm
 from models import PUNet
 import optuna
 
-NUM_CLASSES = 3
+NUM_CLASSES = 2
 # PATH_SAVE_MODEL = r'/home/al5098/Github/ML_for_Medicane_Wind_Rings/models/semantic_segmentation'
 METRICS = MetricCollection({
     "precision": MulticlassPrecision(num_classes=NUM_CLASSES),
@@ -24,21 +24,15 @@ METRICS = MetricCollection({
     "mIoU": JaccardIndex(task='multiclass', num_classes=NUM_CLASSES, average='macro'),
     "confusion_matrix": MulticlassConfusionMatrix(num_classes=NUM_CLASSES)
 })
+
 TRAIN_LOSSES = []
 VAL_LOSSES = []
 
+torch.manual_seed(52205)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
 def z_score_norm(data: torch.Tensor, target: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    # wind_data = data[:2]
-    # land_sea_mask = data[2:]
-    # wind_data_copy = wind_data.numpy()
-    # mean = np.nanmean(wind_data_copy, axis=(1, 2), keepdims=True)
-    # std = np.nanstd(wind_data_copy, axis=(1, 2), keepdims=True)
-    # mean = torch.from_numpy(mean).type_as(wind_data)
-    # std = torch.from_numpy(std).type_as(wind_data)
-    # wind_data_norm = (wind_data - mean) / std
-    # data_norm = torch.cat([wind_data_norm, land_sea_mask], dim=0)
-
     data_copy = data.numpy()
     mean = np.nanmean(data_copy, axis=(1, 2), keepdims=True)
     std = np.nanstd(data_copy, axis=(1, 2), keepdims=True)
@@ -49,21 +43,31 @@ def z_score_norm(data: torch.Tensor, target: dict[str, torch.Tensor]) -> tuple[t
     return data_norm, target
 
 
-def load_data(batch_size: int, val_split: float, test_split: float) -> Union[tuple[DataLoader, DataLoader], tuple[DataLoader, DataLoader, DataLoader]]:
-    dataset = CycloneDatasetSS(
+def min_max(data: torch.Tensor, target: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    eplison = 1e-6
+    data_copy = data.numpy()
+    min = np.nanmin(data_copy, axis=(1, 2), keepdims=True)
+    max = np.nanmax(data_copy, axis=(1, 2), keepdims=True)
+    min = torch.from_numpy(min).type_as(data)
+    max = torch.from_numpy(max).type_as(data)
+    data_norm = (data - min) / (max - min + eplison)
+    return data_norm, target
+
+
+def load_data(batch_size: int, val_split: float, test_split: float, transform: str) -> Union[tuple[DataLoader, DataLoader], tuple[DataLoader, DataLoader, DataLoader]]:
+    if transform == 'min_max':
+        dataset = CycloneDatasetSS(
+        r'/scratch/network/al5098/Medicanes/data/processed/annotations_SS.txt', r'/scratch/network/al5098/Medicanes/data/processed/dataset', transform=min_max)
+    else:
+        dataset = CycloneDatasetSS(
         r'/scratch/network/al5098/Medicanes/data/processed/annotations_SS.txt', r'/scratch/network/al5098/Medicanes/data/processed/dataset', transform=z_score_norm)
+
+    num_workers = 2
     if test_split == 0:
         training_samples = int(len(dataset) * (1 - val_split))
 
         train_set, validation_set = torch.utils.data.random_split(
             dataset, [training_samples, len(dataset) - training_samples])
-
-        train_loader = DataLoader(
-            dataset=train_set, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=2, pin_memory=True)
-        validation_loader = DataLoader(
-            dataset=validation_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=2, pin_memory=True)
-        return train_loader, validation_loader
-
     else:
         test_samples = int((len(dataset)) * test_split)
         validation_samples = int(len(dataset) * val_split)
@@ -72,21 +76,25 @@ def load_data(batch_size: int, val_split: float, test_split: float) -> Union[tup
         train_set, validation_set, test_set = torch.utils.data.random_split(
             dataset, [training_samples, validation_samples, test_samples])
 
-        train_loader = DataLoader(
-            dataset=train_set, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=2, pin_memory=True)
-        validation_loader = DataLoader(
-            dataset=validation_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=2, pin_memory=True)
         test_loader = DataLoader(
-            dataset=test_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=2, pin_memory=True)
+            dataset=test_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=num_workers, pin_memory=True)
 
+    train_loader = DataLoader(
+        dataset=train_set, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=num_workers, pin_memory=True)
+    validation_loader = DataLoader(
+        dataset=validation_set, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=num_workers, pin_memory=True)
+
+    if test_split == 0:
+        return train_loader, validation_loader
+    else:
         return train_loader, validation_loader, test_loader
 
 
 def init_model() -> nn.Module:
-    return PUNet(channels_in=2, channels_out=NUM_CLASSES)
+    return PUNet(channels_in=4, channels_out=NUM_CLASSES)
 
 
-def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, device: torch.device):
+def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader):
     model.train()
     train_loss = 0.0
     for datas, masks in train_loader:
@@ -96,7 +104,7 @@ def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, devi
         binary_masks = binary_masks[:, 0:1, :, :]
         optimizer.zero_grad()
         outputs = model(datas, binary_masks)
-        loss = loss_fn(outputs, masks)
+        loss = criterion(outputs, masks)
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
@@ -105,39 +113,50 @@ def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, devi
 
 
 def objective(trial: optuna.Trial) -> tuple[float, float, float, float, float, float]:
-    lr = trial.suggest_categorical('lr', [5e-1, 1e-1, 5e-2, 1e-2, 5e-3, 1e-3, 5e-4, 1e-4, 5e-5, 1e-5])
+    lr = trial.suggest_float('lr', 1e-5, 1, log=True)
     batch_size = trial.suggest_int('batch_size', 1, 128)
-    momentum = trial.suggest_float('momentum', 0.8, 0.99, step=0.01)
-    weight_decay = trial.suggest_categorical(
-        'weight_decay', [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6])
+    transform = trial.suggest_categorical('transform', ['min_max', 'z_score_norm'])
+    optimizer = trial.suggest_categorical('optimizer', ['Adam', 'SGD'])
+    weight_decay = trial.suggest_float('weight_decay', 1e-6, 1e-1)
 
     if args.test_split == 0:
         train_loader, validation_loader = load_data(  # type: ignore
-            batch_size, args.validation_split, args.test_split)
+            batch_size, args.validation_split, args.test_split, transform)
     else:
         train_loader, validation_loader, test_loader = load_data(  # type: ignore
-            batch_size, args.validation_split, args.test_split)
+            batch_size, args.validation_split, args.test_split, transform)
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = init_model().to(device)
-    optimizer = torch.optim.SGD(
-        model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
+
+    if optimizer == 'SGD':
+        momentum = trial.suggest_float('momentum', 0.8, 0.99, step=0.01)
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
+    else:
+        beta1 = trial.suggest_float('beta1', 0.8, 0.99, step=0.01)
+        beta2 = trial.suggest_float('beta2', 0.9, 0.99, step=0.01)
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(beta1, beta2), weight_decay=weight_decay)
+    
 
     for epoch in tqdm(range(args.num_epochs), desc=f'Trial: {trial.number}', unit='epoch'):
-        model, train_loss = train(model, optimizer, train_loader, device)
+        model, train_loss = train(model, optimizer, train_loader)
         # save_model(model, optimizer, train_loader, args.num_epochs, epoch)
         TRAIN_LOSSES.append(train_loss)
-        val_loss = validate(model, validation_loader, device)
+        scheduler.step()
+        val_loss = validate(model, validation_loader)
         VAL_LOSSES.append(val_loss)
         results = METRICS.compute()
 
-    
-    return val_loss, results['precision'].item(), results['recall'].item(), results['pixel_wise_acc'].item(), results['dice_score'].item(), results['mIoU'].item() # type: ignore
+    # type: ignore
+    return val_loss, results['precision'].item(), results['recall'].item(), results['pixel_wise_acc'].item(), results['dice_score'].item(), results['mIoU'].item()
 
 
-def loss_fn(outputs: torch.Tensor, masks: torch.Tensor) -> torch.Tensor:
-    function = nn.CrossEntropyLoss()
-    return function(outputs, masks)
+def criterion(outputs: torch.Tensor, masks: torch.Tensor) -> torch.Tensor:
+    epsilon = 1e-6
+    weights = torch.bincount(masks.flatten(), minlength=NUM_CLASSES).float()
+    weights = 1 / torch.sqrt(weights + epsilon)
+    weights = weights.to(device)
+    loss = nn.CrossEntropyLoss(weight=weights)(outputs, masks)
+    return loss
 
 
 # def save_model(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, num_epochs: int, epoch: int) -> None:
@@ -150,7 +169,7 @@ def loss_fn(outputs: torch.Tensor, masks: torch.Tensor) -> torch.Tensor:
 #     torch.save(model.state_dict(), model_path)
 
 
-def validate(model: nn.Module, validation_loader: DataLoader, device: torch.device) -> float:
+def validate(model: nn.Module, validation_loader: DataLoader) -> float:
     total_loss = 0.0
     model.eval()
     METRICS.to(device)
@@ -163,7 +182,7 @@ def validate(model: nn.Module, validation_loader: DataLoader, device: torch.devi
             binary_masks = binary_masks[:, 0:1, :, :]
             outputs = model(datas, binary_masks)
             preds = torch.argmax(outputs, dim=1)
-            loss = loss_fn(outputs, masks)
+            loss = criterion(outputs, masks)
             total_loss += loss.item()
             METRICS.update(preds=preds, target=masks)
 

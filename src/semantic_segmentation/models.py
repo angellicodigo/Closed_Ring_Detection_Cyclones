@@ -90,101 +90,83 @@ class UNet(nn.Module):
 
 
 class PUNetDown(nn.Module):
-    def __init__(self, input_size, output_size, batch_norm=True):
+    def __init__(self, input_size, output_size, kernel_size, padding, batch_norm=True):
         super(PUNetDown, self).__init__()
-        self.bn1 = nn.BatchNorm2d(input_size)
-        self.elu1 = nn.ELU()
-        self.pconv1 = PartialConv2d(
-            input_size, output_size, kernel_size=3, stride=1, padding=1, multi_channel=False, return_mask=True)
-        self.bn2 = nn.BatchNorm2d(output_size)
-        self.elu2 = nn.ELU()
-        self.pool = nn.MaxPool2d(2)
-        self.pconv2 = PartialConv2d(
-            output_size, output_size, kernel_size=3, stride=1, padding=1, multi_channel=False, return_mask=True)
+        self.pconv = PartialConv2d(input_size, output_size, kernel_size=kernel_size,
+                                   stride=2, padding=padding, multi_channel=False, return_mask=True)
+        self.batch_norm = batch_norm
+        if batch_norm:
+            self.bn = nn.BatchNorm2d(output_size)
+        self.relu = nn.ReLU()
 
     def forward(self, x, mask):
-        x = self.bn1(x)
-        x = self.elu1(x)
-        x, mask = self.pconv1(x, mask_in=mask)
-        x = self.bn2(x)
-        x = self.elu2(x)
-        x = self.pool(x)
-        mask = self.pool(mask)
-        x, mask = self.pconv2(x, mask_in=mask)
+        x, mask = self.pconv(x, mask_in=mask)
+        if self.batch_norm:
+            x = self.bn(x)
+        x = self.relu(x)
         return x, mask
 
 
 class PUNetUp(nn.Module):
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, kernel_size, padding, batch_norm=True):
         super(PUNetUp, self).__init__()
-        self.bn1 = nn.BatchNorm2d(input_size)
-        self.elu1 = nn.ELU()
-        self.pconv1 = PartialConv2d(
-            input_size, output_size, kernel_size=3, stride=1, padding=1, multi_channel=False, return_mask=True)
-        self.bn2 = nn.BatchNorm2d(output_size)
-        self.elu2 = nn.ELU()
         self.upsample = nn.Upsample(scale_factor=2, mode="nearest")
-        self.pconv2 = PartialConv2d(
-            output_size, output_size, kernel_size=3, stride=1, padding=1, multi_channel=False, return_mask=True)
+        self.pconv = PartialConv2d(input_size, output_size, kernel_size=kernel_size,
+                                   stride=1, padding=padding, multi_channel=False, return_mask=True)
+        self.batch_norm = batch_norm
+        if batch_norm:
+            self.bn = nn.BatchNorm2d(output_size)
+        self.leakyrelu = nn.LeakyReLU(negative_slope=0.2)
 
     def forward(self, x, mask):
-        x = self.bn1(x)
-        x = self.elu1(x)
-        x, mask = self.pconv1(x, mask_in=mask)
-        x = self.bn2(x)
-        x = self.elu2(x)
         x = self.upsample(x)
         mask = self.upsample(mask)
-        x, mask = self.pconv2(x, mask_in=mask)
+        x, mask = self.pconv(x, mask_in=mask)
+        if self.batch_norm:
+            x = self.bn(x)
+        x = self.leakyrelu(x)
         return x, mask
 
 
 class PUNet(nn.Module):
     def __init__(self, channels_in, channels_out):
         super(PUNet, self).__init__()
-        self.conv_in = PartialConv2d(
-            # H X W --> 64, H X W
-            channels_in, 64, kernel_size=3, stride=1, padding=1, multi_channel=False, return_mask=True)
 
-        self.down1 = PUNetDown(64, 64)  # H   X W   --> H/2 X W/2
-        self.down2 = PUNetDown(64, 128)  # H/2 X W/2 --> H/4 X W/4
-        self.down3 = PUNetDown(128, 128)  # H/4 X W/4 --> H/8 X W/8
-        self.down4 = PUNetDown(128, 256)  # H/8 X W/8 --> H/16 X W/16
+        self.down1 = PUNetDown(channels_in, 64, 7, 3, False)
+        self.down2 = PUNetDown(64, 128, 5, 2)
+        self.down3 = PUNetDown(128, 128, 5, 2)
+        self.down4 = PUNetDown(128, 256, 3, 1)
+        self.down5 = PUNetDown(256, 512, 3, 1)
 
         # Note that the first parameter is the amount of channels
-        self.up4 = PUNetUp(256, 128)  # H/16 X W/16 --> H/8 X W/8
-        self.up5 = PUNetUp(128 * 2, 128)  # H/8 X W/8 --> H/4 X W/4
-        self.up6 = PUNetUp(128 * 2, 64)  # H/4 X W/4 --> H/2 X W/2
-        self.up7 = PUNetUp(64 * 2, 64)  # H/2 X W/2 --> H   X W
+        self.up4 = PUNetUp(256, 128, 3, 1)
+        self.up5 = PUNetUp(128 * 2, 128, 3, 1)
+        self.up6 = PUNetUp(128 * 2, 64, 3, 1)
+        self.up7 = PUNetUp(64 * 2, channels_in, 3, 1)
 
-        self.conv_out = PartialConv2d(
-            64 * 2, channels_out, kernel_size=3, stride=1, padding=1, multi_channel=False, return_mask=False)  # H X W --> 64, H X W
+        self.conv_out = nn.Conv2d(channels_in * 2, channels_out, kernel_size=1)
 
     def forward(self, x, mask):
-        x0, mask0 = self.conv_in(x, mask)  # 16 x H x W
+        x1, mask1 = self.down1(x, mask)
+        x2, mask2 = self.down2(x1, mask1)
+        x3, mask3 = self.down3(x2, mask2)
+        x4, mask4 = self.down4(x3, mask3)
 
-        x1, mask1 = self.down1(x0, mask0)  # 32 x H/2 x W/2
-        x2, mask2 = self.down2(x1, mask1)  # 64 x H/4 x W/4
-        x3, mask3 = self.down3(x2, mask2)  # 64 x H/8 x W/8
-        x4, mask4 = self.down4(x3, mask3)  # 128 x H/16 x W/16
-
-        # Bottle-neck --> 128 x H/16 x W/16
-
-        x5, mask5 = self.up4(x4, mask4)  # 64 x H/8 x W/8
+        # Bottle-neck
+        x5, mask5 = self.up4(x4, mask4)
 
         # Torch.cat is doing skip-connections
-        x5_ = torch.cat((x5, x3), 1)  # 128 x H/8 x W/8
+        x5_ = torch.cat((x5, x3), 1)
         mask5_ = ((mask5 + mask3) > 0).float()
-        x6, mask6 = self.up5(x5_, mask5_)  # 32 x H/4 x W/4
+        x6, mask6 = self.up5(x5_, mask5_)
 
-        x6_ = torch.cat((x6, x2), 1)  # 64 x H/4 x W/4
+        x6_ = torch.cat((x6, x2), 1)
         mask6_ = ((mask6 + mask2) > 0).float()
-        x7, mask7 = self.up6(x6_, mask6_)  # 16 x H/2 x W/2
+        x7, mask7 = self.up6(x6_, mask6_)
 
-        x7_ = torch.cat((x7, x1), 1)  # 64 x H/2 x W/2
+        x7_ = torch.cat((x7, x1), 1)
         mask7_ = ((mask7 + mask1) > 0).float()
-        x8, mask8 = self.up7(x7_, mask7_)  # 16 x H x W
+        x8, _ = self.up7(x7_, mask7_)
 
-        x8_ = F.elu(torch.cat((x8, x0), 1))  # 32 x H x W
-        mask8_ = ((mask8 + mask0) > 0).float()
-        return self.conv_out(x8_, mask8_)  # Co x H x W
+        x8_ = torch.cat((x8, x), 1)
+        return F.sigmoid(self.conv_out(x8_))

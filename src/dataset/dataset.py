@@ -110,7 +110,6 @@ class CycloneDatasetSS(Dataset):  # For semantic segmentation
     def __len__(self):
         return len(self.data)
 
-
     def __getitem__(self, idx: int):
         row = self.annotations.iloc[idx]
         ds = self.data[idx]
@@ -118,18 +117,21 @@ class CycloneDatasetSS(Dataset):  # For semantic segmentation
         U = ds['wind_speed'] * np.sin(np.radians(ds['wind_dir']))
         V = ds['wind_speed'] * np.cos(np.radians(ds['wind_dir']))
 
-        land_sea_mask = ds['wind_speed'].notnull().astype(int)
-
         data = torch.from_numpy(
-            xr.concat([U, V], dim='channel').values).float()
+            xr.concat([U, V, ds['lon'], ds['lat']], dim='channel').values).float()
 
-        mask = get_segmentation_map(ds, row['lat'], row['lon'], self.radius)
-        mask = xr.where(mask, row['label'] + 1, 0)
-        mask = torch.from_numpy(mask.values).long()
+        if row['label'] == 1:
+            mask = get_segmentation_map(ds, row['lat'], row['lon'], self.radius)
+            mask = xr.where(mask, row['label'], 0)
+            mask = torch.from_numpy(mask.values).long()
+        else:
+            mask = torch.zeros((data.shape[1], data.shape[2]), dtype=torch.long)
 
         if self.transform is not None:
             data, mask = self.transform(data, mask)
 
-        # Replace nan with -1
-        data = torch.nan_to_num(data, nan=-1)
+        # Replace nan with 0 because U and V have negative numbers, but none of it is 0
+        data = torch.nan_to_num(data, nan=0)
+
+        # Data has shape (NUM_CLASSES, 80, 80)
         return data, mask
