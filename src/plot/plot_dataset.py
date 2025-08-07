@@ -19,8 +19,7 @@ def plot_dataset() -> None:
     train_set, _ = torch.utils.data.random_split(dataset, [training_samples, len(dataset) - training_samples])
     train_loader = DataLoader(dataset=train_set, batch_size=1, shuffle=False)
 
-    # for batch in tqdm(train_loader, total=len(train_loader)):
-    for batch in train_loader:
+    for batch in tqdm(train_loader, total=len(train_loader)):
         datas = batch['data'].to(device)
         masks = batch['mask'].to(device)
         datas_copy = datas.detach().cpu().numpy()[0]
@@ -78,8 +77,6 @@ def plot_dataset() -> None:
         file_name = batch['file_name'][0]
         if label == 1:
             folder_path = os.path.join(PATH_TRUE, f"{file_name}.png")
-            test = masks_copy == 1
-            print(f'{label} @ {file_name}: {test.any()}')
         else:
             folder_path = os.path.join(PATH_FALSE, f"{file_name}.png")
 

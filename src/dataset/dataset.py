@@ -84,6 +84,9 @@ class CycloneDatasetSS(Dataset):  # For semantic segmentation
                 else:
                     ds = ds.drop_isel({row_dim: -1})
 
+                upper_limit = 0.85
+                lower_limit = 0.15
+
                 indices = []
                 if (j > 39) and (j < 119):
                     dist_top = j
@@ -91,13 +94,13 @@ class CycloneDatasetSS(Dataset):  # For semantic segmentation
                     start = 0
                     end = 0
                     if dist_top <= dist_bot:
-                        start = int(dist_top * 0.25)
-                        end = int(dist_top * 0.75)
+                        start = int(dist_top * lower_limit)
+                        end = int(dist_top * upper_limit)
                         index = np.random.randint(start, end)
                         indices = np.arange(index, index + 80)
                     else:
-                        start = j + int(dist_bot * 0.25)
-                        end = j + int(dist_bot * 0.75)
+                        start = j + int(dist_bot * lower_limit)
+                        end = j + int(dist_bot * upper_limit)
                         index = np.random.randint(start, end)
                         indices = np.arange(index - 80, index)
                 elif j <= 39:
@@ -122,11 +125,13 @@ class CycloneDatasetSS(Dataset):  # For semantic segmentation
             xr.concat([U, V, ds['lon'], ds['lat']], dim='channel').values).float()
 
         if row['label'] == 1:
-            mask = get_segmentation_map(ds, row['lat'], row['lon'], self.radius)
+            mask = get_segmentation_map(
+                ds, row['lat'], row['lon'], self.radius)
             mask = xr.where(mask, row['label'], 0)
             mask = torch.from_numpy(mask.values).long()
         else:
-            mask = torch.zeros((data.shape[1], data.shape[2]), dtype=torch.long)
+            mask = torch.zeros(
+                (data.shape[1], data.shape[2]), dtype=torch.long)
 
         if self.transform is not None:
             data, mask = self.transform(data, mask)
