@@ -52,10 +52,11 @@ from src.config.utils import get_boundary_box, get_segmentation_map, nearest_nei
 
 
 class CycloneDatasetSS(Dataset):  # For semantic segmentation
-    def __init__(self, path_txt: str, root_dir: str, radius=100, transform=None):
+    def __init__(self, path_txt: str, root_dir: str, radius=100, transform=None, metadata=False):
         self.radius = radius
         self.transform = transform
         self.data = []
+        self.metadata = metadata
 
         self.annotations = pd.read_csv(path_txt, sep=r'\t', engine='python')
         for _, row in self.annotations.iterrows():
@@ -134,4 +135,16 @@ class CycloneDatasetSS(Dataset):  # For semantic segmentation
         data = torch.nan_to_num(data, nan=0)
 
         # Data has shape (NUM_CLASSES, 80, 80)
+        if self.metadata:
+            metadata = {
+                'data': data,
+                'mask': mask,
+                'file_name': row['file_name'],
+                'lat': row['lat'],
+                'lon': row['lon'],
+                'label': row['label'],
+                'idx': idx
+            }
+            return metadata
+
         return data, mask
