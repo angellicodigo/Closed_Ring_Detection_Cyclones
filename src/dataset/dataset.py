@@ -122,7 +122,7 @@ class CycloneDatasetSS(Dataset):  # For semantic segmentation
         V = ds['wind_speed'] * np.cos(np.radians(ds['wind_dir']))
 
         data = torch.from_numpy(
-            xr.concat([U, V, ds['lon'], ds['lat']], dim='channel').values).float()
+            xr.concat([U, V], dim='channel').values).float()
 
         if row['label'] == 1:
             mask = get_segmentation_map(
