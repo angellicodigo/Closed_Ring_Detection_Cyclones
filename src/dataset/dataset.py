@@ -51,7 +51,7 @@ from src.config.utils import get_boundary_box, get_segmentation_map, nearest_nei
 #             return data, target
 
 
-class CycloneDatasetSS(Dataset):  # For semantic segmentation
+class CycloneDataset(Dataset):  # For semantic segmentation
     def __init__(self, path_txt: str, root_dir: str, radius=100, transform=None, metadata=False):
         self.radius = radius
         self.transform = transform
@@ -132,6 +132,13 @@ class CycloneDatasetSS(Dataset):  # For semantic segmentation
         else:
             mask = torch.zeros(
                 (data.shape[1], data.shape[2]), dtype=torch.long)
+            
+        binary_mask = torch.from_numpy(~np.isnan(ds['wind_speed'].values)).float().unsqueeze(0) 
+
+        # mask = get_segmentation_map(
+        #     ds, row['lat'], row['lon'], self.radius)
+        # mask = xr.where(mask, row['label'], 0)
+        # mask = torch.from_numpy(mask.values).long()
 
         if self.transform is not None:
             data, mask = self.transform(data, mask)
@@ -152,4 +159,4 @@ class CycloneDatasetSS(Dataset):  # For semantic segmentation
             }
             return metadata
 
-        return data, mask
+        return data, mask, binary_mask
