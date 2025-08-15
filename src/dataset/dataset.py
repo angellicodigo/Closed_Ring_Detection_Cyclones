@@ -4,62 +4,21 @@ import pandas as pd
 import os
 import xarray as xr
 import numpy as np
-from src.config.utils import get_boundary_box, get_segmentation_map, nearest_neighbors_indices
+from src.config.utils import get_segmentation_map, nearest_neighbors_indices
+from typing import List
 
 
-# class CycloneDatasetOD(Dataset):  # For object detection
-#     def __init__(self, path_txt: str, root_dir: str, radius=100, transform=None):
-#         self.annotations = pd.read_csv(path_txt, sep=r'\t', engine='python')
-#         self.root_dir = root_dir
-#         self.radius = radius
-#         self.transform = transform
-
-#     def __len__(self):
-#         return len(self.annotations)
-
-#     def __getitem__(self, idx: int):
-#         row = self.annotations.iloc[idx]
-#         file_path = os.path.join(self.root_dir, row['file_name'])
-#         with xr.open_dataset(file_path) as ds:
-#             U = ds['wind_speed'] * np.sin(np.radians(ds['wind_dir']))
-#             V = ds['wind_speed'] * np.cos(np.radians(ds['wind_dir']))
-
-#             data = torch.from_numpy(
-#                 xr.concat([U, V], dim='channel').values).float()
-
-#             min_lat, min_lon, max_lat, max_lon = get_boundary_box(
-#                 ds, row['lat'], row['lon'], self.radius)
-#             top_left = (min_lon, max_lat)
-#             bot_right = (max_lon, min_lat)
-
-#             x1, y1 = coords_to_pixels(
-#                 ds, top_left[1], top_left[0], row['lat'], row['lon'])
-#             x2, y2 = coords_to_pixels(
-#                 ds, bot_right[1], bot_right[0], row['lat'], row['lon'])
-
-#             target = {}
-#             target['boxes'] = torch.tensor(
-#                 [[x1, y1, x2, y2]], dtype=torch.float32)
-#             target['labels'] = torch.tensor([row['label']], dtype=torch.int64)
-
-#             if self.transform is not None:
-#                 data, target = self.transform(data, target)
-
-#             # Replace nan with -1
-#             data = torch.nan_to_num(data, nan=-1)
-#             ds.close()
-#             return data, target
-
-
-class CycloneDataset(Dataset):  # For semantic segmentation
-    def __init__(self, path_txt: str, root_dir: str, radius=100, transform=None, metadata=False):
+class CycloneDataset(Dataset):
+    def __init__(self, path_txt: str, root_dir: str, radius=100, num_classes = 2, transform=None, metadata=False, augment=False, reduction_ratio=None):
         self.radius = radius
         self.transform = transform
         self.data = []
         self.metadata = metadata
+        self.epsilon = 1e-07
 
-        self.annotations = pd.read_csv(path_txt, sep=r'\t', engine='python')
-        for _, row in self.annotations.iterrows():
+        org_annotations = pd.read_csv(path_txt, sep=r'\t', engine='python')
+        annotations = pd.DataFrame(columns=org_annotations.columns)
+        for _, row in org_annotations.iterrows():
             file_path = os.path.join(root_dir, row['file_name'])
             with xr.open_dataset(file_path) as ds:
                 i, j = nearest_neighbors_indices(ds, row['lat'], row['lon'])
@@ -109,7 +68,28 @@ class CycloneDataset(Dataset):  # For semantic segmentation
                     indices = np.arange(80, 160)
 
                 # Now 80 x 80 by keeping certain columns
-                self.data.append(ds.isel({row_dim: indices}))
+                ds = ds.isel({row_dim: indices})
+                ds['U'] = ds['wind_speed'] * np.sin(np.radians(ds['wind_dir']))
+                ds['V'] = ds['wind_speed'] * np.cos(np.radians(ds['wind_dir']))
+
+                self.data.append(ds.copy())
+                annotations.loc[len(annotations)] = row.copy() 
+
+                if augment and (row['label'] == 1):
+                    ds['U'] = -ds['U']
+                    ds['V'] = -ds['V']
+                    self.data.append(ds)
+                    annotations.loc[len(annotations)] = row.copy()  # So data and annotations are same length
+
+
+        if reduction_ratio != None:
+            indices = annotations.index[annotations['label'] == 0].to_numpy()
+            n = int(len(indices) * reduction_ratio)
+            remove_indices = np.random.choice(indices, size=n, replace=False)
+            self.data = [data for i, data in enumerate(self.data) if i not in remove_indices]
+            annotations = annotations.drop(remove_indices).reset_index(drop=True) # type: ignore
+        
+        self.annotations = annotations
 
     def __len__(self):
         return len(self.data)
@@ -118,11 +98,8 @@ class CycloneDataset(Dataset):  # For semantic segmentation
         row = self.annotations.iloc[idx]
         ds = self.data[idx]
 
-        U = ds['wind_speed'] * np.sin(np.radians(ds['wind_dir']))
-        V = ds['wind_speed'] * np.cos(np.radians(ds['wind_dir']))
-
         data = torch.from_numpy(
-            xr.concat([U, V], dim='channel').values).float()
+            xr.concat([ds['U'], ds['V']], dim='channel').values).float()
 
         if row['label'] == 1:
             mask = get_segmentation_map(
@@ -132,8 +109,9 @@ class CycloneDataset(Dataset):  # For semantic segmentation
         else:
             mask = torch.zeros(
                 (data.shape[1], data.shape[2]), dtype=torch.long)
-            
-        binary_mask = torch.from_numpy(~np.isnan(ds['wind_speed'].values)).float().unsqueeze(0) 
+
+        binary_mask = torch.from_numpy(
+            ~np.isnan(ds['wind_speed'].values)).float().unsqueeze(0)
 
         # mask = get_segmentation_map(
         #     ds, row['lat'], row['lon'], self.radius)
@@ -160,3 +138,25 @@ class CycloneDataset(Dataset):  # For semantic segmentation
             return metadata
 
         return data, mask, binary_mask
+
+    def get_weights_pixels(self, num_classes: int) -> torch.Tensor:
+        counts = torch.zeros(num_classes, dtype=torch.float32)
+
+        for batch in self:
+            counts += torch.bincount(batch[1].flatten(), minlength=num_classes).float() # type: ignore
+
+        weights = 1.0 / (torch.sqrt(counts) + self.epsilon)
+        return weights
+
+    def get_weights_class(self, num_classes: int, indices=None) -> List[float]:
+        counts = torch.zeros(num_classes, dtype=torch.float32)
+
+        if indices == None:
+            indices = range(len(self))
+
+        class_weights = 1.0 / (counts + self.epsilon)
+        sample_weights = []
+        for idx in indices:
+            label = int(self.annotations.iloc[idx]['label'])
+            sample_weights.append(class_weights[label])
+        return sample_weights
