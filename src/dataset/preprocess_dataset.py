@@ -41,6 +41,7 @@ def preprocess(radius: float, threshold: float, num: int, checkBBox: bool):
                         elif get_num_points(ds, row['lat'], row['lon'], radius, False) != 0:
                             input = get_segmentation_input(
                                 ds, row, radius, threshold, num)
+                            
                     ds.close()
 
         if len(input) != 0:

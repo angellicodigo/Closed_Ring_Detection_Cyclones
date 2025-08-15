@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from partialconv2d import PartialConv2d
+from grid_attention_layer import GridAttentionBlock2D  # type: ignore
 
 
 class UNetDown(nn.Module):
@@ -43,9 +44,10 @@ class UNetUp(nn.Module):
 
 
 class UNet(nn.Module):
-    def __init__(self, channels_in, channels_out):
+    def __init__(self, channels_in, channels_out, width_multiplier=1):
         super(UNet, self).__init__()
-
+        # self.mha = nn.MultiheadAttention(
+        #     channels_in, num_heads=1, batch_first=True)
         self.conv_in = nn.Conv2d(channels_in, out_channels=64,
                                  kernel_size=3, stride=1, padding=1)   # H X W --> 64, H X W
 
@@ -64,6 +66,14 @@ class UNet(nn.Module):
                                   kernel_size=3, stride=1, padding=1)  # H X W --> H X W
 
     def forward(self, x):
+        # B, C, H, W = x.shape
+        # x = x.reshape(B, C, H * W).transpose(1, 2)
+        # binary_mask = binary_mask.reshape(B, H * W)
+        # binary_mask = ~binary_mask
+        # x, _ = self.mha(x, x, x, key_padding_mask=binary_mask)
+
+        # x = x.transpose(1, 2).reshape(B, C, H, W)
+
         x0 = self.conv_in(x)  # 16 x H x W
 
         x1 = self.down1(x0)  # 32 x H/2 x W/2
@@ -134,15 +144,14 @@ class PUNet(nn.Module):
 
         self.down1 = PUNetDown(channels_in, 64, 7, 3, False)
         self.down2 = PUNetDown(64, 128, 5, 2)
-        self.down3 = PUNetDown(128, 128, 5, 2)
-        self.down4 = PUNetDown(128, 256, 3, 1)
-        self.down5 = PUNetDown(256, 512, 3, 1)
+        self.down3 = PUNetDown(128, 256, 5, 2)
+        self.down4 = PUNetDown(256, 512, 3, 1)
 
         # Note that the first parameter is the amount of channels
-        self.up4 = PUNetUp(256, 128, 3, 1)
-        self.up5 = PUNetUp(128 * 2, 128, 3, 1)
-        self.up6 = PUNetUp(128 * 2, 64, 3, 1)
-        self.up7 = PUNetUp(64 * 2, channels_in, 3, 1)
+        self.up1 = PUNetUp(512, 256, 3, 1)
+        self.up2 = PUNetUp(256 * 2, 128, 3, 1)
+        self.up3 = PUNetUp(128 * 2, 64, 3, 1)
+        self.up4 = PUNetUp(64 * 2, channels_in, 3, 1)
 
         self.conv_out = nn.Conv2d(channels_in * 2, channels_out, kernel_size=1)
 
@@ -153,20 +162,64 @@ class PUNet(nn.Module):
         x4, mask4 = self.down4(x3, mask3)
 
         # Bottle-neck
-        x5, mask5 = self.up4(x4, mask4)
+        x5, mask5 = self.up1(x4, mask4)
 
         # Torch.cat is doing skip-connections
         x5_ = torch.cat((x5, x3), 1)
         mask5_ = ((mask5 + mask3) > 0).float()
-        x6, mask6 = self.up5(x5_, mask5_)
+        x6, mask6 = self.up2(x5_, mask5_)
 
         x6_ = torch.cat((x6, x2), 1)
         mask6_ = ((mask6 + mask2) > 0).float()
-        x7, mask7 = self.up6(x6_, mask6_)
+        x7, mask7 = self.up3(x6_, mask6_)
 
         x7_ = torch.cat((x7, x1), 1)
         mask7_ = ((mask7 + mask1) > 0).float()
-        x8, _ = self.up7(x7_, mask7_)
+        x8, _ = self.up4(x7_, mask7_)
 
         x8_ = torch.cat((x8, x), 1)
-        return F.sigmoid(self.conv_out(x8_))
+        return F.elu(self.conv_out(x8_))
+
+
+# class PUNet_Attention(nn.Module):
+#     def __init__(self, channels_in, channels_out):
+#         super(PUNet_Attention, self).__init__()
+
+#         self.down1 = PUNetDown(channels_in, 64, 7, 3, False)
+#         self.down2 = PUNetDown(64, 128, 5, 2)
+#         self.down3 = PUNetDown(128, 128, 5, 2)
+#         self.down4 = PUNetDown(128, 256, 3, 1)
+#         self.down5 = PUNetDown(256, 512, 3, 1)
+
+#         # Note that the first parameter is the amount of channels
+#         self.up4 = PUNetUp(256, 128, 3, 1)
+#         self.up5 = PUNetUp(128 * 2, 128, 3, 1)
+#         self.up6 = PUNetUp(128 * 2, 64, 3, 1)
+#         self.up7 = PUNetUp(64 * 2, channels_in, 3, 1)
+
+#         self.conv_out = nn.Conv2d(channels_in, channels_out, kernel_size=1)
+
+#     def forward(self, x, mask):
+#         x1, mask1 = self.down1(x, mask)
+#         x2, mask2 = self.down2(x1, mask1)
+#         x3, mask3 = self.down3(x2, mask2)
+#         x4, mask4 = self.down4(x3, mask3)
+
+#         # Bottle-neck
+#         x5, mask5 = self.up4(x4, mask4)
+
+#         # Torch.cat is doing skip-connections
+#         x5_ = torch.cat((x5, x3), 1)
+#         mask5_ = ((mask5 + mask3) > 0).float()
+#         x6, mask6 = self.up5(x5_, mask5_)
+
+#         x6_ = torch.cat((x6, x2), 1)
+#         mask6_ = ((mask6 + mask2) > 0).float()
+#         x7, mask7 = self.up6(x6_, mask6_)
+
+#         x7_ = torch.cat((x7, x1), 1)
+#         mask7_ = ((mask7 + mask1) > 0).float()
+#         x8, _ = self.up7(x7_, mask7_)
+
+#         x8_ = torch.cat((x8, x), 1)
+#         return F.elu(self.conv_out(x8_))

@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
-from src.dataset.dataset import CycloneDatasetSS
+from src.dataset.dataset import CycloneDataset
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import BoundaryNorm
@@ -14,7 +14,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def plot_dataset() -> None:
-    dataset = CycloneDatasetSS(r'C:\Users\angel\VSCode\ML_for_Medicane_Wind_Rings\data\processed\annotations_SS.txt', r'C:\Users\angel\VSCode\ML_for_Medicane_Wind_Rings\data\processed\dataset', metadata=True)
+    dataset = CycloneDataset(r'C:\Users\angel\VSCode\ML_for_Medicane_Wind_Rings\data\processed\annotations_SS.txt', r'C:\Users\angel\VSCode\ML_for_Medicane_Wind_Rings\data\processed\dataset', metadata=True)
     training_samples = len(dataset)
     train_set, _ = torch.utils.data.random_split(dataset, [training_samples, len(dataset) - training_samples])
     train_loader = DataLoader(dataset=train_set, batch_size=1, shuffle=False)
