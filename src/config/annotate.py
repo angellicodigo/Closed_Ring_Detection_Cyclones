@@ -16,7 +16,7 @@ PATH_DATASET = r'data\processed\dataset'
 MEDICANES = [1328, 1461, 1542, 1575, 1622, 1702]
 OVER_LAND = [848, 849, 860, 864, 865, 868, 871, 873, 889, 900, 907, 926, 940, 943, 950, 951, 969, 981, 985, 988, 992, 1001, 1018, 1023, 1025, 1030, 1033, 1034, 1041, 1043, 1060, 1064, 1072, 1089, 1094, 1107, 1112, 1126, 1147, 1154, 1166, 1180, 1185, 1199, 1206, 1214, 1215, 1223, 1225, 1232, 1257, 1262, 1264, 1273,
              1274, 1276, 1306, 1308, 1317, 1318, 1322, 1327, 1341, 1365, 1392, 1404, 1405, 1408, 1414, 1420, 1441, 1450, 1452, 1453, 1456, 1484, 1491, 1492, 1496, 1497, 1533, 1535, 1562, 1563, 1568, 1569, 1570, 1583, 1595, 1596, 1603, 1605, 1608, 1612, 1614, 1615, 1616, 1625, 1648, 1649, 1650, 1651, 1664, 1666, 1686, 1700]
-EXCLUDE = [1542, 1622, 1466, 1500, 1674]
+# EXCLUDE = [1542, 1622, 1466, 1500, 1674] # Forgot why these are excluded
 
 
 def annotate(window_size: float) -> None:
@@ -30,13 +30,12 @@ def annotate(window_size: float) -> None:
         cyclone_id = row['cyclone_id']
         if cyclone_id in MEDICANES:
             results_list.append(row['label'])
-        elif (cyclone_id not in OVER_LAND) and (cyclone_id not in EXCLUDE):
+        elif (cyclone_id not in OVER_LAND):
             if (row['lon'] != -np.nan) and (row['lat'] != -np.nan):
-                if (row['label'] == 'idk') or (int(row['slabel']) != int(row['label'])):
-                    file_path = os.path.join(PATH_DATASET, row['file_name'])
-                    ds = xr.open_dataset(file_path)
-                    datasets_list.append((row, ds))
-                    ds.close()
+                file_path = os.path.join(PATH_DATASET, row['file_name'])
+                ds = xr.open_dataset(file_path)
+                datasets_list.append((row, ds))
+                ds.close()
 
     index = [0]  # A list with 0 because list is global but integer is not
     cbar_prev = [None]
@@ -126,7 +125,7 @@ def annotate(window_size: float) -> None:
             df['label'] = results_list
             save_path = os.path.join(
                 PATH_DATASET, f'new_{os.path.basename(PATH_INFO)}')
-            df.to_csv(save_path, index=False)
+            # df.to_csv(save_path, index=False)
             plt.close()
 
     button_true.on_clicked(isTrue)
