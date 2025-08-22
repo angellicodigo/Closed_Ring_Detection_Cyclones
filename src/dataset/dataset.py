@@ -9,12 +9,13 @@ from typing import List
 
 
 class CycloneDataset(Dataset):
-    def __init__(self, path_txt: str, root_dir: str, radius=100, num_classes = 2, transform=None, metadata=False, augment=False, reduction_ratio=None):
+    def __init__(self, path_txt: str, root_dir: str, radius=100, num_classes = 2, transform=None, metadata=False, augment=False, isClassifcaiton=False):
         self.radius = radius
         self.transform = transform
         self.data = []
         self.metadata = metadata
         self.epsilon = 1e-07
+        self.isClassification = isClassifcaiton
 
         org_annotations = pd.read_csv(path_txt, sep=r'\t', engine='python')
         annotations = pd.DataFrame(columns=org_annotations.columns)
@@ -80,14 +81,6 @@ class CycloneDataset(Dataset):
                     ds['V'] = -ds['V']
                     self.data.append(ds)
                     annotations.loc[len(annotations)] = row.copy()  # So data and annotations are same length
-
-
-        if reduction_ratio != None:
-            indices = annotations.index[annotations['label'] == 0].to_numpy()
-            n = int(len(indices) * reduction_ratio)
-            remove_indices = np.random.choice(indices, size=n, replace=False)
-            self.data = [data for i, data in enumerate(self.data) if i not in remove_indices]
-            annotations = annotations.drop(remove_indices).reset_index(drop=True) # type: ignore
         
         self.annotations = annotations
 
@@ -136,25 +129,43 @@ class CycloneDataset(Dataset):
                 'idx': idx
             }
             return metadata
-
+        
+        if self.isClassification:
+            return data, torch.tensor(row['label'], dtype=torch.float).unsqueeze(0), binary_mask
+        
         return data, mask, binary_mask
 
-    def get_weights_pixels(self, num_classes: int) -> torch.Tensor:
+    def get_weights_pixels(self, num_classes: int, indices=None):
         counts = torch.zeros(num_classes, dtype=torch.float32)
 
-        for batch in self:
+        for batch in self: # Counting pixels of global dataset
             counts += torch.bincount(batch[1].flatten(), minlength=num_classes).float() # type: ignore
 
-        weights = 1.0 / (torch.sqrt(counts) + self.epsilon)
+        weights = 1.0 / (torch.sqrt(counts) + self.epsilon) 
+
+        if indices != None:
+            sample_weights = []
+
+            for idx in indices:
+                label = int(self.annotations.iloc[idx]['label'])
+                sample_weights.append(weights[label])
+            
+            return sample_weights
+
         return weights
 
-    def get_weights_class(self, num_classes: int, indices=None) -> List[float]:
+    def get_weights_class(self, num_classes: int, indices=None) -> List[float]: # Based on indices, like training set, or globallyZ
         counts = torch.zeros(num_classes, dtype=torch.float32)
 
         if indices == None:
             indices = range(len(self))
 
+        for idx in indices: # Counts global number of labels
+            label = int(self.annotations.iloc[idx]['label'])
+            counts[label] += 1
+
         class_weights = 1.0 / (counts + self.epsilon)
+        
         sample_weights = []
         for idx in indices:
             label = int(self.annotations.iloc[idx]['label'])

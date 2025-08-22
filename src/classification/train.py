@@ -2,33 +2,25 @@ import torch
 from torch.utils.data import WeightedRandomSampler, DataLoader, Subset
 from torch.optim import Optimizer
 from torchmetrics import MetricCollection
-from torchmetrics.segmentation import DiceScore
-from torchmetrics.classification import MulticlassPrecision, MulticlassRecall, MulticlassAccuracy, JaccardIndex, MulticlassConfusionMatrix
+from torchmetrics.classification import BinaryPrecision, BinaryRecall, BinaryAccuracy
 import torch.nn as nn
 from src.dataset.dataset import CycloneDataset
-from src.config.loss import FocalLoss
 import argparse
 import numpy as np
 from tqdm import tqdm
 # import os
-from models import PUNet
+from models import PartialClassifier # type: ignore
 import optuna
 
 NUM_CLASSES = 2
 # PATH_SAVE_MODEL = r'/home/al5098/Github/ML_for_Medicane_Wind_Rings/models/semantic_segmentation'
+
 METRICS = MetricCollection({
-    "precision": MulticlassPrecision(num_classes=NUM_CLASSES),
-    "recall": MulticlassRecall(num_classes=NUM_CLASSES),
-    # "pixel_wise_acc": MulticlassAccuracy(num_classes=NUM_CLASSES),
-    "dice_score_per_class": DiceScore(num_classes=NUM_CLASSES, average=None, input_format='index'),
-    "dice_score_micro": DiceScore(num_classes=NUM_CLASSES, average='micro', input_format='index'),
-    "dice_score_macro": DiceScore(num_classes=NUM_CLASSES, average='macro', input_format='index'),
-    "mIoU_macro": JaccardIndex(task='multiclass', num_classes=NUM_CLASSES, average='macro'),
-    "mIoU_micro": JaccardIndex(task='multiclass', num_classes=NUM_CLASSES, average='micro'),
-    "mIoU_per_class": JaccardIndex(task='multiclass', num_classes=NUM_CLASSES, average=None)
-    # "confusion_matrix": MulticlassConfusionMatrix(num_classes=NUM_CLASSES)
+    "precision": BinaryPrecision(),
+    "recall":    BinaryRecall(),
+    "acc":       BinaryAccuracy(),
 })
-REDUCTION_RATIO = 0.95
+REDUCTION_RATIO = 0
 
 torch.manual_seed(52205)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -56,7 +48,7 @@ def min_max(data: torch.Tensor, target: dict[str, torch.Tensor]) -> tuple[torch.
 
 
 DATASET = CycloneDataset(r'/scratch/network/al5098/Medicanes/data/processed/annotations_SS.txt',
-                         r'/scratch/network/al5098/Medicanes/data/processed/dataset', transform=min_max, augment=True)
+                         r'/scratch/network/al5098/Medicanes/data/processed/dataset', transform=min_max, augment=True, isClassifcaiton=True)
 
 def load_data(batch_size: int, val_split: float, test_split: float):
     num_workers = 2
@@ -98,12 +90,13 @@ def train(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, loss
     train_loss = 0.0
 
     # datas is shaped (B, C, H, W) and masks is shaped (B, H, W)
-    for datas, masks, binary_masks in train_loader:
-        datas, masks, binary_masks = datas.to(
-            device), masks.to(device), binary_masks.to(device)
+    for datas, labels, binary_masks in train_loader:
+        datas, labels, binary_masks = datas.to(
+            device), labels.to(device), binary_masks.to(device)
         optimizer.zero_grad()
         outputs = model(datas, binary_masks)
-        loss = loss_fn(outputs, masks)
+
+        loss = loss_fn(outputs, labels)
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
@@ -118,8 +111,8 @@ def objective(trial):
     # optimizer = trial.suggest_categorical('optimizer', ['Adam', 'SGD'])
     weight_decay = trial.suggest_float('weight_decay', 1e-6, 1e-1, log=True)
     # smooth = trial.suggest_float('smooth', 0, 1)
-    alpha = trial.suggest_float('alpha', 0, 1)
-    gamma = trial.suggest_float('gamma', 0, 5)
+    # alpha = trial.suggest_float('alpha', 0, 1)
+    # gamma = trial.suggest_float('gamma', 0, 5)
     # handle_loss = trial.suggest_categorical('Handle_Loss', ['Normalize', 'Individual'])
     # if handle_loss == 'Normalize':
     # w1 = trial.suggest_float('weight_cross_entropy_loss', 0, 1)
@@ -136,7 +129,7 @@ def objective(trial):
         train_loader, validation_loader, test_loader = load_data(  # type: ignore
             batch_size, args.validation_split, args.test_split)
 
-    model = PUNet(channels_in=2, channels_out=NUM_CLASSES)
+    model = PartialClassifier(channels_in=2)
     model.to(device)
 
     # if optimizer == 'SGD':
@@ -149,22 +142,22 @@ def objective(trial):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(
         beta1, beta2), weight_decay=weight_decay)
 
-    criterion = FocalLoss(alpha=alpha, gamma=gamma)
+    criterion = nn.BCEWithLogitsLoss()
 
     for epoch in tqdm(range(epochs), desc=f'Trial: {trial.number}', unit='epoch'):
         model, train_loss = train(model, optimizer, train_loader, criterion)
         # save_model(model, optimizer, train_loader, args.epochs, epoch)
         val_loss = validate(model, validation_loader, criterion)
-        results = METRICS.compute()
-        trial.report(results['mIoU_macro'].item(), epoch)
+        trial.report(val_loss, epoch)
 
         if trial.should_prune():
             raise optuna.TrialPruned()
-
+        
+    results = METRICS.compute()
     if training:
-        return results['mIoU_macro'].item()
+        return val_loss
     else:
-        return results['precision'].item(), results['recall'].item(), results['dice_score_per_class'], results['dice_score_macro'].item(), results['dice_score_micro'].item(), results['mIoU_per_class'], results['mIoU_macro'].item(), results['mIoU_micro'].item()  # type: ignore
+        return val_loss, results['precision'].item(), results['recall'].item(), results['acc'] # type: ignore
 
 
 # def save_model(model: nn.Module, optimizer: Optimizer, train_loader: DataLoader, epochs: int, epoch: int) -> None:
@@ -183,14 +176,14 @@ def validate(model: nn.Module, validation_loader: DataLoader, loss_fn) -> float:
     METRICS.to(device)
     METRICS.reset()
     with torch.no_grad():
-        for datas, masks, binary_masks in validation_loader:
-            datas, masks, binary_masks = datas.to(
-                device), masks.to(device), binary_masks.to(device)
+        for datas, labels, binary_masks in validation_loader:
+            datas, labels, binary_masks = datas.to(
+                device), labels.to(device), binary_masks.to(device)
             outputs = model(datas, binary_masks)
-            preds = torch.argmax(outputs, dim=1)
-            loss = loss_fn(outputs, masks)
+            loss = loss_fn(outputs, labels)
             total_loss += loss.item()
-            METRICS.update(preds=preds, target=masks)
+            preds = torch.sigmoid(outputs)
+            METRICS.update(preds=preds, target=labels)
 
     return total_loss / len(validation_loader)
 
@@ -205,10 +198,9 @@ if __name__ == '__main__':
 
     # study = optuna.create_study(directions=['minimize', 'maximize', 'maximize', 'maximize', 'maximize', 'maximize'], pruner=optuna.pruners.MedianPruner())
     study = optuna.create_study(
-        directions=['maximize'], pruner=optuna.pruners.MedianPruner())
+        directions=['minimize'], pruner=optuna.pruners.MedianPruner())
 
     global epochs
-    global training
     epochs = 50
     training = True
     study.optimize(objective, n_trials=args.trials)
@@ -218,15 +210,10 @@ if __name__ == '__main__':
     print(f"\tparams: {study.best_trial.params}")
     print(f"\tvalues: {study.best_trial.values}")
 
-    epochs = args.epochs
+    # epochs = args.epochs
     training = False
     results = objective(study.best_trial)
     print(f"Performance of best trial {study.best_trial.number}: ")
     print(f"\tPrecision: {results[0]}")
     print(f"\tRecall: {results[1]}")
-    print(f"\tDice Score per class: {results[2]}")
-    print(f"\tDice Score macro: {results[3]}")
-    print(f"\tDice Score micro: {results[4]}")
-    print(f"\tmIoU per class: {results[5]}")
-    print(f"\tmIoU macro: {results[6]}")
-    print(f"\tmIoU micro: {results[7]}")
+    print(f"\tAcc: {results[2]}")
