@@ -56,7 +56,14 @@ def open_file(file_path: Path, query_lon: Optional[float], query_lat: Optional[f
         nearest_point = ds.isel({row_dim: nearest_row, col_dim: nearest_col})
         
         plot(ds, query_lat, query_lon, year, month, day, hour, radius, window_size, isBBox)
-       
+
+        if plotAll:
+            folder_path = os.path.join(PATH_PLOT_ALL_SAVE, f"{title}.png")
+        else:
+            folder_path = os.path.join(PATH_FOLDER, f"{title}.png")
+        plt.savefig(
+            folder_path, format="png", dpi=1200)
+
         if not plotAll:
             print(f'Name: {title}')
             print(
@@ -69,13 +76,7 @@ def open_file(file_path: Path, query_lon: Optional[float], query_lat: Optional[f
                 f'Does nearest neighbor have wind speed? {nearest_point["wind_speed"].values}')
             print(f'Average time: {average_time}')
             plt.show()
-
-        if plotAll:
-            folder_path = os.path.join(PATH_PLOT_ALL_SAVE, f"{title}.png")
-        else:
-            folder_path = os.path.join(PATH_FOLDER, f"{title}.png")
-        plt.savefig(
-            folder_path, format="png")
+        
         plt.close()
     
 
@@ -90,7 +91,7 @@ def plot(ds: xr.Dataset, query_lat: float, query_lon: float,  year: int, month: 
     quiver = ax.quiver(ds['lon'], ds['lat'], U, V, ds['wind_speed'],
                        cmap='turbo', transform=ccrs.PlateCarree(), scale=500, pivot='mid', norm=norm) # type: ignore
     cbar = plt.colorbar(quiver)
-    cbar.set_label("Wind Speed")
+    cbar.set_label("Wind Speed (m/s)")
     cbar.set_ticks(boundaries)  # type: ignore
     ax.coastlines()  # type: ignore
     gridlines = ax.gridlines(draw_labels=True)  # type: ignore
