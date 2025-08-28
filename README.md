@@ -11,7 +11,8 @@ This project is exploring the use of object detection (Faster R-CNN) and semanti
 I also included a presentation that includes background information and more details of the project.
 
 # Directory structure (Based on the Cookiecutter Data Science):
-> ├── LICENSE            <- Open-source license if one is chosen
+```
+├── LICENSE            <- Open-source license if one is chosen
 ├── Makefile           <- Makefile with convenience commands like `make data` or `make train`
 ├── README.md          <- The top-level README for developers using this project.
 ├── data
@@ -57,3 +58,4 @@ I also included a presentation that includes background information and more det
     │   └── train.py            <- Code to train models
     │
     └── plots.py                <- Code to create visualizations   
+```
