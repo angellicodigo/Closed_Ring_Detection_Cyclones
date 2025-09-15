@@ -6,19 +6,27 @@ import shutil
 import numpy as np
 from tqdm import tqdm
 
+# Path to the folder with ASCAT files (161 x 161)
 PATH_TRACKS = r'data\raw\Tracks'
+# Path where those ASCAT files are saved in
 PATH_DATASET = r'data\processed\dataset'
+# Path to a txt files with pre-annotated Medicanes
 PATH_INFO = r'data\raw\annotations_template.txt'
-PATH_WHERE_SAVE = r'data\processed'
-PATH_INTERM = r'data\interim'
-NUM_OF_FOLDERS = 5939
+# Path where annotations of all cyclones are saved
+PATH_SAVE = r'data\raw'
+NUM_OF_FOLDERS = 5939  # Number of files in raw/Tracks
 
+# Pre-annotated Medicanes that are already
 MEDICANES = [1328, 1461, 1542, 1575, 1622, 1702]
 
 
 def add_files() -> None:
-    save_path = os.path.join(PATH_WHERE_SAVE, 'dataset')
-    os.makedirs(save_path, exist_ok=True)
+    """
+    Returns:
+        Creates dataset folder in data/processed and creates annotations_interm.txt in data/interim
+        
+    """
+    os.makedirs(PATH_DATASET, exist_ok=True)
     df = pd.read_csv(PATH_INFO, sep=r'\t', engine='python')
     for root, _, files in tqdm(os.walk(PATH_TRACKS), total=NUM_OF_FOLDERS, desc='Searching through each folder in Tracks', unit='folder'):
         for file_name in files:
@@ -32,12 +40,13 @@ def add_files() -> None:
                     input = {'cyclone_id': cyclone_id, 'year': year, 'file_name': file_name,
                              'lat': center_lat, 'lon': center_lon, 'label': np.nan}
                     df.loc[len(df)] = input  # type: ignore
-                    # PATH_DST = os.path.join(save_path, file_name)
+                    # Copies the files from raw/Tracks to processed/dataset
+                    # PATH_DST = os.path.join(PATH_DATASET, file_name)
                     # shutil.copyfile(path, PATH_DST)
 
-    folder_path = os.path.join(PATH_INTERM, "annotations_interm.txt")
+    folder_path = os.path.join(PATH_SAVE, "annotations_raw.txt")
     df.to_csv(folder_path, index=False, sep='\t')
-    print(f'How many files? {len(df)}')  # type: ignore
+    print(f'How many files? {len(df)}') 
 
 
 if __name__ == '__main__':

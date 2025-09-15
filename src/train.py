@@ -8,9 +8,9 @@ from src.dataset.dataset import CycloneDataset
 import argparse
 import numpy as np
 from tqdm import tqdm
-# import os
-from models import PartialClassifier # type: ignore
+from config.models import PartialClassifier
 import optuna
+# import os
 
 NUM_CLASSES = 2
 # PATH_SAVE_MODEL = r'/home/al5098/Github/ML_for_Medicane_Wind_Rings/models/semantic_segmentation'
@@ -20,7 +20,6 @@ METRICS = MetricCollection({
     "recall":    BinaryRecall(),
     "acc":       BinaryAccuracy(),
 })
-REDUCTION_RATIO = 0
 
 torch.manual_seed(52205)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

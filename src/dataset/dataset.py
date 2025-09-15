@@ -9,11 +9,18 @@ from typing import List
 
 
 class CycloneDataset(Dataset):
-    def __init__(self, path_txt: str, root_dir: str, radius=100, num_classes = 2, transform=None, metadata=False, augment=False, isClassifcaiton=False):
+    def __init__(self, path_txt: str, root_dir: str, type: str, radius=100, transform=None, augment=False):
+        """
+        Args:
+            
+        
+        Returns:
+
+
+        """
         self.radius = radius
         self.transform = transform
         self.data = []
-        self.metadata = metadata
         self.epsilon = 1e-07
         self.isClassification = isClassifcaiton
 
