@@ -40,26 +40,28 @@ I also included a presentation that includes background information and more det
 │
 └── src   <- Source code for use in this project.
     │
-    ├── __init__.py             <- Makes {{ cookiecutter.module_name }} a Python module
+    ├── __init__.py             
     │
     ├── config                  <- Store useful variables and configuration
     │   ├── __init__.py 
-    │   ├── loss.py          <- Code to run model inference with trained models          
-    │   ├── models.py            <- Code to train models
-    │   ├── partialconv2d.py            <- Code to train models
-    │   └── utils.py            <- Code to train models
+    │   ├── loss.py             <- Code that stores the loss functions used         
+    │   ├── models.py           <- Code that stores the structure of the model used
+    │   ├── partialconv2d.py    <- Code of the Partial Convolution Layer fron Nvidia
+    │   └── utils.py            <- Code of functions that may be reused throughout other files
     │
-    ├── dataset              <- Scripts to download or generate data
-    │   ├── __init__.py 
-    │   ├── visualize_dataset.py          <- Code to run model inference with trained models          
-    │   ├── generate_dataset.py            <- Code to train models
-    │   ├── preprocess_dataset.py            <- Code to train models
-    │   ├── filter_dataset.py            <- Code to train models
-    │   └── dataset.py            <- Code to train models
+    ├── dataset                 <- Scripts to download or generate data
+    │   ├── __init__.py    
+    │   ├── generate_dataset.py      <- Code to generate annotations_raw.txt from annotations_template.txt
+    │   ├── preprocess_dataset.py    <- Code to create annotations_interm.txt from annotations_raw.txt
+    │   ├── filter_dataset.py        <- Code where given number of points over the ocean and percentage of points
+    │   │                               over the ocean over all points, filter annotations_interm.txt to get annotations.txt
+    │   ├── visualize_dataset.py     <- Code to visualize any version of annotations.txt   
+    │   └── dataset.py               <- Code of a custom Pytorch Dataloader that loads annotations.txt
     │
-    ├── plot               <- Code to create visualizations
-    │   ├──plot_stats.py          <- Code to run model inference with trained models          
-    │   ├──plot.py            <- Code to train models
+    ├── plot                    <- Scripts to create visualizations
+    │   ├── plot_stats.py       <- Code to create box plots, histograms, scatterplots, or density plots. Also
+    │   │                          identifies outliers and the ideal parameters for filter_dataset.py.        
+    │   └── plot.py             <- Code to plot either each data point in annotations.txt or a single ASCAT file
     │
-    └── train.py 
+    └── train.py                <- Code to train the model 
 ```
