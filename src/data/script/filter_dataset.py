@@ -1,19 +1,22 @@
 import argparse
+import os
 from pathlib import Path
+import sys
+import time
+
+import dotenv
 import pandas as pd
 import xarray as xr
-from pathlib import Path
-import os
-import sys
 
 file_path = Path(__file__).resolve()
 src_dir = file_path.parents[2]
 sys.path.append(str(src_dir))
 
 from utils.utils import calc_percent_over_ocean, get_num_points_over_ocean
-import dotenv
 
-dotenv_path = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, ".env")
+dotenv_path = os.path.join(
+    os.path.dirname(__file__), os.pardir, os.pardir, ".env"
+)
 dotenv.load_dotenv(dotenv_path)
 
 MEDICANES = [1328, 1461, 1542, 1575, 1622, 1702]
@@ -28,7 +31,16 @@ def filter(radius: float, threshold: float, num: int) -> None:
           ocean.
         num (int): Minimum required absolute number of grid points over ocean.
     """
-    columns = ["cyclone_id", "year", "file_name", "lat", "lon", "label"]
+    # Positioned "file_path" as the last column
+    columns = [
+        "cyclone_id",
+        "year",
+        "file_name",
+        "lat",
+        "lon",
+        "label",
+        "file_path",
+    ]
     result = pd.DataFrame(columns=columns)
 
     df = pd.read_csv(
@@ -40,6 +52,10 @@ def filter(radius: float, threshold: float, num: int) -> None:
 
     for _, row in df.iterrows():
         input_data = {}
+
+        # Resolve relative/absolute path for NetCDF file lookup
+        rel_file_path = row.get("file_path", row["file_name"])
+
         if row["cyclone_id"] in MEDICANES:
             input_data = {
                 "cyclone_id": row["cyclone_id"],
@@ -48,22 +64,23 @@ def filter(radius: float, threshold: float, num: int) -> None:
                 "lat": row["lat"],
                 "lon": row["lon"],
                 "label": row["label"],
+                "file_path": rel_file_path,
             }
         else:
             file_name = row["file_name"]
 
             if file_name in file_map:
-                file_path = file_map[file_name]
+                nc_path = file_map[file_name]
             elif "file_path" in row and pd.notna(row["file_path"]):
                 tracks_parent = os.path.dirname(os.path.normpath(tracks_dir))
-                file_path = os.path.normpath(
+                nc_path = os.path.normpath(
                     os.path.join(tracks_parent, row["file_path"])
                 )
-            else:                
+            else:
                 continue
 
-            # Open NetCDF file and evaluate ocean point criteria within the target radius
-            with xr.open_dataset(file_path) as ds:
+            # Open NetCDF file and evaluate ocean point criteria within target radius
+            with xr.open_dataset(nc_path) as ds:
                 points_over_ocean = get_num_points_over_ocean(
                     ds, row["lat"], row["lon"], radius
                 )
@@ -82,6 +99,7 @@ def filter(radius: float, threshold: float, num: int) -> None:
                         "lat": row["lat"],
                         "lon": row["lon"],
                         "label": row["label"],
+                        "file_path": rel_file_path,
                     }
 
         # Append valid candidate row to final results DataFrame
@@ -117,7 +135,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    import time
     start_time = time.perf_counter()
     filter(args.radius, args.threshold, args.n)
     elapsed = time.perf_counter() - start_time
