@@ -7,7 +7,6 @@ dependencies:
   - python=3.12
   - numpy
   - pandas
-  - scipy
   - scikit-learn
   - xarray
   - netcdf4

@@ -3,7 +3,6 @@ import numpy as np
 import xarray as xr
 from sklearn.metrics.pairwise import haversine_distances
 from pyproj import Geod
-from scipy.stats import circmean, circstd
 from typing import Tuple
 import os
 import dotenv
@@ -264,58 +263,6 @@ def calc_percent_over_ocean(ds: xr.Dataset, query_lat: float, query_lon: float, 
 
     """
     return (get_num_points_over_ocean(ds, query_lat, query_lon, radius) / get_num_points(ds, query_lat, query_lon, radius)) * 100
-
-# TODO: may delete the function because it's not being used
-def mean_std_wind_dir(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float) -> Tuple[float, float]:
-    """
-    Args:
-        ds: xarray dataset in the ASCAT file
-        query_lat: latitude point in ds
-        query_lon: longitude point in ds
-        radius: distance km away from query point
-
-    Returns:
-        Returns the mean and standard deviation of the wind direction of points radius km away of query point in ds
-
-    """
-    lats = ds['lat'].values
-    lons = ds['lon'].values
-    distances = dist_bwt_two_points(query_lat, query_lon, lats, lons)
-    distance_mask = distances <= radius  # distance_mask is not 1D
-    # Also mask not 1D. Also a binary mask
-    mask = ~np.isnan(ds['wind_speed'].values)
-    # A binary mask, where 1 is True and 0 is False
-    combined_mask = np.logical_and(distance_mask, mask)
-
-    wind_dir = ds['wind_dir'].values[combined_mask]
-
-    return circmean(wind_dir, high=360, low=0), circstd(wind_dir, high=360, low=0)
-
-# TODO: may remove because it's not being used
-def mean_std_wind_speed(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float) -> Tuple[float, float]:
-    """
-    Args:
-        ds: xarray dataset in the ASCAT file
-        query_lat: latitude point in ds
-        query_lon: longitude point in ds
-        radius: distance km away from query point
-
-    Returns:
-        Returns the mean and standard deviation of the wind speed of points radius km away of query point in ds
-
-    """
-    lats = ds['lat'].values
-    lons = ds['lon'].values
-    distances = dist_bwt_two_points(query_lat, query_lon, lats, lons)
-    distance_mask = distances <= radius  # distance_mask is not 1D
-    # Also mask not 1D. Also a binary mask
-    mask = ~np.isnan(ds['wind_speed'].values)
-    # A binary mask, where 1 is True and 0 is False
-    combined_mask = np.logical_and(distance_mask, mask)
-
-    wind_speed = ds['wind_speed'].values[combined_mask]
-
-    return float(np.mean(wind_speed)), float(np.std(wind_speed))
 
 if __name__ == "__main__":
     # 1. Create a dummy Synthetic ASCAT xarray Dataset (3x3 grid)
