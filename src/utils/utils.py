@@ -1,4 +1,3 @@
-from typing import Union
 import pandas as pd
 import numpy as np
 import xarray as xr
@@ -6,9 +5,12 @@ from sklearn.metrics.pairwise import haversine_distances
 from pyproj import Geod
 from scipy.stats import circmean, circstd
 from typing import Tuple
+import os
+import dotenv
 
-PATH_CENTERS = r'data\external\TRACKS_CL7.dat'
-
+project_dir = os.path.join(os.path.dirname(__file__), os.pardir)
+dotenv_path = os.path.join(project_dir, '.env')
+dotenv.load_dotenv(dotenv_path)
 
 def get_center(cyclone_id: int, year: int, month: int, day: int, time: pd.Timestamp) -> tuple[float, float]:
     """Returns the center based on what is written in TRACKS_CL7.dat. The idea is to get the center
@@ -28,7 +30,7 @@ def get_center(cyclone_id: int, year: int, month: int, day: int, time: pd.Timest
     """
     columns = ['cyclone_id', 'lon', 'lat',
                'year', 'month', 'day', 'hour', 'MSLP']
-    centers = pd.read_csv(PATH_CENTERS, sep=r'\s+', names=columns)
+    centers = pd.read_csv(os.getenv("CENTER_CYCLONES_PATH"), sep=r'\s+', names=columns)
     round_hour = time.round('h').hour
     row = centers.loc[
         (centers['cyclone_id'] == np.int64(cyclone_id)) &
@@ -70,7 +72,7 @@ def nearest_neighbors(ds: xr.Dataset, query_lat: float, query_lon: float) -> xr.
     return xr.concat(points, dim='neighbors')
 
 
-def dist_bwt_two_points(lat1: float, lon1: float, lat2:  Union[float, np.ndarray], lon2:  Union[float, np.ndarray]) -> Union[float, np.ndarray]:
+def dist_bwt_two_points(lat1: float, lon1: float, lat2:  float | np.ndarray, lon2:  float | np.ndarray) -> float | np.ndarray:
     """Given two points (or a point and numpy of points), calculate the haversine distance between them
 
     Args: 
@@ -153,8 +155,8 @@ def get_mean_info(ds: xr.Dataset) -> tuple[pd.Timestamp, int, int, int]:
 
     return average_time, year, month, day
 
-
-def get_boundary_box(query_lat: float, query_lon: float, radius: float) -> tuple[float, float, float, float]:
+# TODO: May remove because no longer doing object detection
+def get_boundary_box(query_lat: float, query_lon: float, radius: float) -> tuple[float, float, float, float]: 
     """Get the boundary box around the latitude and longitude point at a distance radius (km) away
 
     Args:
@@ -263,7 +265,7 @@ def calc_percent_over_ocean(ds: xr.Dataset, query_lat: float, query_lon: float, 
     """
     return (get_num_points_over_ocean(ds, query_lat, query_lon, radius) / get_num_points(ds, query_lat, query_lon, radius)) * 100
 
-
+# TODO: may delete the function because it's not being used
 def mean_std_wind_dir(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float) -> Tuple[float, float]:
     """
     Args:
@@ -289,7 +291,7 @@ def mean_std_wind_dir(ds: xr.Dataset, query_lat: float, query_lon: float, radius
 
     return circmean(wind_dir, high=360, low=0), circstd(wind_dir, high=360, low=0)
 
-
+# TODO: may remove because it's not being used
 def mean_std_wind_speed(ds: xr.Dataset, query_lat: float, query_lon: float, radius: float) -> Tuple[float, float]:
     """
     Args:
@@ -314,3 +316,63 @@ def mean_std_wind_speed(ds: xr.Dataset, query_lat: float, query_lon: float, radi
     wind_speed = ds['wind_speed'].values[combined_mask]
 
     return float(np.mean(wind_speed)), float(np.std(wind_speed))
+
+if __name__ == "__main__":
+    # 1. Create a dummy Synthetic ASCAT xarray Dataset (3x3 grid)
+    lats = np.array([[36.0, 36.0, 36.0], [36.5, 36.5, 36.5], [37.0, 37.0, 37.0]])
+    lons = np.array([[12.0, 12.5, 13.0], [12.0, 12.5, 13.0], [12.0, 12.5, 13.0]])
+    
+    # Top-right cell is NaN to mimic land
+    wind_speed = np.array([[10.0, 12.0, 15.0], [8.0, 14.0, 11.0], [9.0, 13.0, np.nan]])
+    wind_dir = np.array([[180.0, 190.0, 200.0], [175.0, 185.0, 195.0], [170.0, 180.0, np.nan]])
+    times = np.full((3, 3), pd.Timestamp('2023-10-15T12:00:00'))
+
+    test_ds = xr.Dataset(
+        data_vars={
+            'lat': (('x', 'y'), lats),
+            'lon': (('x', 'y'), lons),
+            'wind_speed': (('x', 'y'), wind_speed),
+            'wind_dir': (('x', 'y'), wind_dir),
+            'time': (('x', 'y'), times),
+        }
+    )
+
+    query_lat, query_lon = 36.5, 12.5
+    radius = 100.0  # km
+
+    # Test get_center
+    lat_c, lon_c = get_center(1702, 2023, 10, 15, pd.Timestamp('2023-10-15T12:00:00'))
+    print(f"1. get_center(): lat={lat_c}, lon={lon_c}")
+
+    # Test dist_bwt_two_points
+    dist = dist_bwt_two_points(36.5, 12.5, 36.5, 13.0)
+    print(f"2. dist_bwt_two_points(): {dist:.2f} km")
+
+    # Test get_boundary_box
+    bbox = get_boundary_box(query_lat, query_lon, radius)
+    print(f"3. get_boundary_box(): {bbox}")
+
+    # Test get_mean_info
+    avg_t, y, m, d = get_mean_info(test_ds)
+    print(f"4. get_mean_info(): Date={y}-{m:02d}-{d:02d}, Time={avg_t}")
+
+    # Test nearest_neighbors
+    nn_ds = nearest_neighbors(test_ds, query_lat, query_lon)
+    print(f"5. nearest_neighbors(): Found {nn_ds.sizes['neighbors']} points")
+
+    # Test ocean counts & percentages
+    total_pts = get_num_points(test_ds, query_lat, query_lon, radius)
+    ocean_pts = get_num_points_over_ocean(test_ds, query_lat, query_lon, radius)
+    pct_ocean = calc_percent_over_ocean(test_ds, query_lat, query_lon, radius)
+    print(f"6. Points inside radius: Total={total_pts}, Ocean={ocean_pts}, Ocean%={pct_ocean:.1f}%")
+
+    # Test wind stats
+    mean_sp, std_sp = mean_std_wind_speed(test_ds, query_lat, query_lon, radius)
+    mean_dir, std_dir = mean_std_wind_dir(test_ds, query_lat, query_lon, radius)
+    print(f"7. Wind Speed: Mean={mean_sp:.2f} m/s, Std={std_sp:.2f}")
+    print(f"8. Wind Direction: Mean={mean_dir:.2f} deg, Std={std_dir:.2f}")
+
+    # Test segmentation map
+    seg_map = get_segmentation_map(test_ds, query_lat, query_lon, radius)
+    print(f"9. Segmentation Map shape: {seg_map.shape}, True count: {seg_map.values.sum()}")
+          

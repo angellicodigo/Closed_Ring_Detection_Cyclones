@@ -65,3 +65,8 @@ I also included a presentation that includes background information and more det
     │
     └── train.py                <- Code to train the model 
 ```
+
+# How to run the code?
+1. Create the environment
+$ cd /Nearly_Closed_Ring_Detection_of_Cyclones/src
+$ conda env create -f environment.yml

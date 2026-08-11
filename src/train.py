@@ -4,7 +4,7 @@ from torch.optim import Optimizer
 from torchmetrics import MetricCollection
 from torchmetrics.classification import BinaryPrecision, BinaryRecall, BinaryAccuracy
 import torch.nn as nn
-from src.dataset.dataset import CycloneDataset
+from prepare_data.dataset import CycloneDataset
 import argparse
 import numpy as np
 from tqdm import tqdm
