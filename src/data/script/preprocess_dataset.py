@@ -1,4 +1,3 @@
-import os
 import sys
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -6,13 +5,14 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from Create_AdditionalAscatSwaths import Create_AdditionalAscatSwaths
-import dotenv
 
 file_path = Path(__file__).resolve()
 src_dir = file_path.parents[2]
 sys.path.append(str(src_dir))
 
 from utils.utils import dist_bwt_two_points
+import os
+import dotenv
 
 src_dir = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
 dotenv_path = os.path.join(src_dir, ".env")
@@ -28,7 +28,6 @@ COLUMNS = [
     "file_path",
 ]
 
-
 MEDICANES = [
     1328,
     1461,
@@ -38,116 +37,17 @@ MEDICANES = [
     1702,
 ]
 
-
 OVER_LAND = [
-    848,
-    849,
-    860,
-    864,
-    865,
-    868,
-    871,
-    873,
-    889,
-    900,
-    907,
-    926,
-    940,
-    943,
-    950,
-    951,
-    969,
-    981,
-    985,
-    988,
-    992,
-    1001,
-    1018,
-    1023,
-    1025,
-    1030,
-    1033,
-    1034,
-    1041,
-    1043,
-    1060,
-    1064,
-    1072,
-    1089,
-    1094,
-    1107,
-    1112,
-    1126,
-    1147,
-    1154,
-    1166,
-    1180,
-    1185,
-    1199,
-    1206,
-    1214,
-    1215,
-    1223,
-    1225,
-    1232,
-    1257,
-    1262,
-    1264,
-    1273,
-    1274,
-    1276,
-    1306,
-    1308,
-    1317,
-    1318,
-    1322,
-    1327,
-    1341,
-    1365,
-    1392,
-    1404,
-    1405,
-    1408,
-    1414,
-    1420,
-    1441,
-    1450,
-    1452,
-    1453,
-    1456,
-    1484,
-    1491,
-    1492,
-    1496,
-    1497,
-    1533,
-    1535,
-    1562,
-    1563,
-    1568,
-    1569,
-    1570,
-    1583,
-    1595,
-    1596,
-    1603,
-    1605,
-    1608,
-    1612,
-    1614,
-    1615,
-    1616,
-    1625,
-    1648,
-    1649,
-    1650,
-    1651,
-    1664,
-    1666,
-    1686,
-    1700,
+    848, 849, 860, 864, 865, 868, 871, 873, 889, 900, 907, 926, 940, 943, 950,
+    951, 969, 981, 985, 988, 992, 1001, 1018, 1023, 1025, 1030, 1033, 1034,
+    1041, 1043, 1060, 1064, 1072, 1089, 1094, 1107, 1112, 1126, 1147, 1154,
+    1166, 1180, 1185, 1199, 1206, 1214, 1215, 1223, 1225, 1232, 1257, 1262,
+    1264, 1273, 1274, 1276, 1306, 1308, 1317, 1318, 1322, 1327, 1341, 1365,
+    1392, 1404, 1405, 1408, 1414, 1420, 1441, 1450, 1452, 1453, 1456, 1484,
+    1491, 1492, 1496, 1497, 1533, 1535, 1562, 1563, 1568, 1569, 1570, 1583,
+    1595, 1596, 1603, 1605, 1608, 1612, 1614, 1615, 1616, 1625, 1648, 1649,
+    1650, 1651, 1664, 1666, 1686, 1700,
 ]
-
 
 EXCLUDE = [
     "20101010190801_track00001282_ASCATA-L2-ICM.nc",
@@ -216,8 +116,9 @@ EXCLUDE = [
     "20190214190615_track00001645_ASCATA-L2-ICM.nc",
     "20191114192724_track00001675_ASCATB-L2-ICM.nc",
     "20191024192815_track00001672_ASCATC-L2-ICM.nc",
-    "20191211201020_track00001678_ASCATB-L2-ICM.nc"
+    "20191211201020_track00001678_ASCATB-L2-ICM.nc",
 ]
+
 
 def check_within_swaths(
     ds: xr.Dataset,
@@ -254,10 +155,8 @@ def check_within_swaths(
     ori_lat = ds["lat"].values
     ori_lon = ds["lon"].values
 
-    return bool(
-        (min_lat in ori_lat)
-        and (min_lon in ori_lon)
-    )
+    return bool((min_lat in ori_lat) and (min_lon in ori_lon))
+
 
 def process_file(
     row,
@@ -296,12 +195,7 @@ def process_file(
             abs_path,
             cache=False,
         ) as ds:
-
-            if np.count_nonzero(
-                ~np.isnan(
-                    ds["wind_speed"].values
-                )
-            ) == 0:
+            if np.count_nonzero(~np.isnan(ds["wind_speed"].values)) == 0:
                 return None
 
             if not check_within_swaths(
@@ -324,17 +218,11 @@ def process_file(
 
     return row.to_dict()
 
-def preprocess(num_workers: int = 32) -> None:
-    df = pd.read_csv(
-        os.getenv("ANNOTATIONS_RAW_PATH"),
-        sep="\t"
-    )
 
-    tracks_parent = os.path.dirname(
-        os.path.normpath(
-            os.getenv("TRACKS_PATH")
-        )
-    )
+def preprocess(num_workers: int = 32) -> None:
+    df = pd.read_csv(os.getenv("ANNOTATIONS_RAW_PATH"), sep="\t")
+
+    tracks_parent = os.path.dirname(os.path.normpath(os.getenv("TRACKS_PATH")))
 
     rows_to_process = []
     result = []
@@ -343,7 +231,6 @@ def preprocess(num_workers: int = 32) -> None:
         lat = row["lat"]
         lon = row["lon"]
 
-        # Drop rows where lat or lon is non-finite (-inf, inf, or NaN)
         try:
             lat_val, lon_val = float(lat), float(lon)
             if not np.isfinite(lat_val) or not np.isfinite(lon_val):
@@ -354,22 +241,18 @@ def preprocess(num_workers: int = 32) -> None:
         cyclone_id = row["cyclone_id"]
         file_name = row["file_name"]
 
-        if cyclone_id in MEDICANES:
-            result.append(row.to_dict())
-            continue
+        # Medicanes skip land and exclusion filters, but STILL undergo swath checks
+        if cyclone_id not in MEDICANES:
+            if cyclone_id in OVER_LAND:
+                continue
 
-        if cyclone_id in OVER_LAND:
-            continue
-
-        if file_name in EXCLUDE:
-            continue
+            if file_name in EXCLUDE:
+                continue
 
         rows_to_process.append(row)
 
     if rows_to_process:
-        with ThreadPoolExecutor(
-            max_workers=num_workers
-        ) as executor:
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
             processed_rows = executor.map(
                 lambda row: process_file(
                     row,
@@ -378,11 +261,7 @@ def preprocess(num_workers: int = 32) -> None:
                 rows_to_process,
             )
 
-            result.extend(
-                row
-                for row in processed_rows
-                if row is not None
-            )
+            result.extend(row for row in processed_rows if row is not None)
 
     result = pd.DataFrame(
         result,
@@ -398,8 +277,10 @@ def preprocess(num_workers: int = 32) -> None:
         sep="\t",
     )
 
+
 if __name__ == "__main__":
     import time
+
     start_time = time.perf_counter()
     preprocess()
     elapsed = time.perf_counter() - start_time

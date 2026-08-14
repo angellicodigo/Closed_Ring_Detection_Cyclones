@@ -14,7 +14,6 @@ src_dir = file_path.parent.parent
 sys.path.append(str(src_dir))
 from utils.utils import get_segmentation_map, nearest_neighbors_indices
 
-
 class CycloneDataset(Dataset):
     def __init__(
         self,
@@ -189,46 +188,46 @@ class CycloneDataset(Dataset):
 
             return data, mask, binary_mask
 
-    def get_weights_pixels(self, num_classes: int, indices=None):
-        counts = torch.zeros(num_classes, dtype=torch.float32)
+    # def get_weights_pixels(self, num_classes: int, indices=None):
+    #     counts = torch.zeros(num_classes, dtype=torch.float32)
 
-        for batch in self:
-            counts += torch.bincount(
-                batch[1].flatten(),
-                minlength=num_classes,
-            ).float()
+    #     for batch in self:
+    #         counts += torch.bincount(
+    #             batch[1].flatten(),
+    #             minlength=num_classes,
+    #         ).float()
 
-        weights = 1.0 / (torch.sqrt(counts) + self.epsilon)
+    #     weights = 1.0 / (torch.sqrt(counts) + self.epsilon)
 
-        if indices is not None:
-            sample_weights = []
+    #     if indices is not None:
+    #         sample_weights = []
 
-            for idx in indices:
-                label = int(self.annotations.iloc[idx]["label"])
-                sample_weights.append(weights[label])
+    #         for idx in indices:
+    #             label = int(self.annotations.iloc[idx]["label"])
+    #             sample_weights.append(weights[label])
 
-            return sample_weights
+    #         return sample_weights
 
-        return weights
+    #     return weights
 
-    def get_weights_class(self, num_classes: int, indices=None) -> List[float]:
-        counts = torch.zeros(num_classes, dtype=torch.float32)
+    # def get_weights_class(self, num_classes: int, indices=None) -> List[float]:
+    #     counts = torch.zeros(num_classes, dtype=torch.float32)
 
-        if indices is None:
-            indices = range(len(self))
+    #     if indices is None:
+    #         indices = range(len(self))
 
-        for idx in indices:
-            label = int(self.annotations.iloc[idx]["label"])
-            counts[label] += 1
+    #     for idx in indices:
+    #         label = int(self.annotations.iloc[idx]["label"])
+    #         counts[label] += 1
 
-        class_weights = 1.0 / (counts + self.epsilon)
+    #     class_weights = 1.0 / (counts + self.epsilon)
 
-        sample_weights = []
-        for idx in indices:
-            label = int(self.annotations.iloc[idx]["label"])
-            sample_weights.append(class_weights[label])
+    #     sample_weights = []
+    #     for idx in indices:
+    #         label = int(self.annotations.iloc[idx]["label"])
+    #         sample_weights.append(class_weights[label])
 
-        return sample_weights
+    #     return sample_weights
 
 
 if __name__ == "__main__":
@@ -304,13 +303,3 @@ if __name__ == "__main__":
             f"  -> Classification label tensor: {label} (type: {label.dtype})"
         )
         print(f"  -> Binary valid-data mask shape: {binary_mask.shape}")
-
-    # ==========================================
-    # Test Weight Calculation Utilities
-    # ==========================================
-    print("\n" + "=" * 50)
-    print("TESTING UTILITY: Class Weight Calculation")
-    print("=" * 50)
-
-    weights = class_dataset.get_weights_class(num_classes=2)
-    print(f"Sample-wise weights computed for first 5 items: {weights[:5]}")

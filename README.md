@@ -21,13 +21,13 @@ $ conda env create -f environment.yml
 2. Fill out the paths in .env file
 3. (Optional) To create the dataset, run these commands
 ```
-cd src/data/script
+cd /Nearly_Closed_Ring_Detection_of_Cyclones/src/data/script
 python generate_dataset.py
 python preprocess_dataset.py
 python filter_dataset.py --radius --threshold --n
 ```
 4. Train the model
 ```
-cd src
+cd /Nearly_Closed_Ring_Detection_of_Cyclones/src
 python train.py
 ```

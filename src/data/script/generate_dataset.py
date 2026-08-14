@@ -1,4 +1,3 @@
-import os
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -11,6 +10,7 @@ src_dir = file_path.parents[2]
 sys.path.append(str(src_dir))
 
 from utils.utils import get_center, get_mean_info
+import os
 import dotenv
 
 src_dir = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)

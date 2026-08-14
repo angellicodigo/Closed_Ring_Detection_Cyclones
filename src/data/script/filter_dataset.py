@@ -1,10 +1,7 @@
 import argparse
-import os
 from pathlib import Path
 import sys
 import time
-
-import dotenv
 import pandas as pd
 import xarray as xr
 
@@ -13,10 +10,10 @@ src_dir = file_path.parents[2]
 sys.path.append(str(src_dir))
 
 from utils.utils import calc_percent_over_ocean, get_num_points_over_ocean
+import os
+import dotenv
 
-dotenv_path = os.path.join(
-    os.path.dirname(__file__), os.pardir, os.pardir, ".env"
-)
+dotenv_path = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, ".env")
 dotenv.load_dotenv(dotenv_path)
 
 MEDICANES = [1328, 1461, 1542, 1575, 1622, 1702]

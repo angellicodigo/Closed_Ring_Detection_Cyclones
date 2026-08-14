@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from partialconv2d import PartialConv2d
+from models.partialconv2d import PartialConv2d
 
 class UNetDown(nn.Module):
     def __init__(self, input_size, output_size):
